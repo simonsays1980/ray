@@ -1,5 +1,5 @@
 base_image: "anyscale/ray-ml:pinned-nightly-py37"
-env_vars: {}
+env_vars: {"RAY_max_grpc_message_size": "250000000"}
 debian_packages: []
 
 python:
