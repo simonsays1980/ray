@@ -368,7 +368,6 @@ def test_redeploy_single_replica(serve_instance, use_handle):
     assert new_version_pid != pid2
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Failing on Windows.")
 @pytest.mark.parametrize("use_handle", [True, False])
 def test_redeploy_multiple_replicas(serve_instance, use_handle):
     # Tests that redeploying a deployment with multiple replicas performs
@@ -381,13 +380,16 @@ def test_redeploy_multiple_replicas(serve_instance, use_handle):
     def call(block=False):
         if use_handle:
             handle = serve.get_deployment(name).get_handle()
-            ret = ray.get(handle.handler.remote(block))
+            ret = ray.get(handle.handler.remote(block)).split("|")
         else:
-            ret = requests.get(
-                f"http://localhost:8000/{name}", params={"block": block}
-            ).text
+            ret = requests.get(f"http://localhost:8000/{name}", params={"block": block})
 
-        return ret.split("|")[0], ret.split("|")[1]
+            if ret.status_code != 200 or len(ret.text.split("|")) != 2:
+                return (None, None)
+
+            ret = ret.text.split("|")
+
+        return ret[0], ret[1]
 
     signal_name = f"signal-{get_random_letters()}"
     signal = SignalActor.options(name=signal_name).remote()
@@ -415,13 +417,15 @@ def test_redeploy_multiple_replicas(serve_instance, use_handle):
         # Returns dict[val, set(pid)].
         blocking = []
         responses = defaultdict(set)
+        timeout_value = 500 if sys.platform == "win32" else 30
         start = time.time()
-        while time.time() - start < 30:
+        while time.time() - start < timeout_value:
             refs = [call.remote(block=False) for _ in range(10)]
             ready, not_ready = ray.wait(refs, timeout=5)
             for ref in ready:
                 val, pid = ray.get(ref)
-                responses[val].add(pid)
+                if val is not None and pid is not None:
+                    responses[val].add(pid)
             for ref in not_ready:
                 blocking.extend(not_ready)
 
@@ -464,7 +468,6 @@ def test_redeploy_multiple_replicas(serve_instance, use_handle):
     make_nonblocking_calls({"2": 2})
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Failing on Windows.")
 @pytest.mark.parametrize("use_handle", [True, False])
 def test_reconfigure_multiple_replicas(serve_instance, use_handle):
     # Tests that updating the user_config with multiple replicas performs a
@@ -477,11 +480,16 @@ def test_reconfigure_multiple_replicas(serve_instance, use_handle):
     def call():
         if use_handle:
             handle = serve.get_deployment(name).get_handle()
-            ret = ray.get(handle.handler.remote())
+            ret = ray.get(handle.handler.remote()).split("|")
         else:
-            ret = requests.get(f"http://localhost:8000/{name}").text
+            ret = requests.get(f"http://localhost:8000/{name}")
 
-        return ret.split("|")[0], ret.split("|")[1]
+            if ret.status_code != 200 or len(ret.text.split("|")) != 2:
+                return (None, None)
+
+            ret = ret.text.split("|")
+
+        return ret[0], ret[1]
 
     signal_name = f"signal-{get_random_letters()}"
     signal = SignalActor.options(name=signal_name).remote()
@@ -508,13 +516,15 @@ def test_reconfigure_multiple_replicas(serve_instance, use_handle):
         # Returns dict[val, set(pid)].
         blocking = []
         responses = defaultdict(set)
+        timeout_value = 500 if sys.platform == "win32" else 30
         start = time.time()
-        while time.time() - start < 30:
+        while time.time() - start < timeout_value:
             refs = [call.remote() for _ in range(10)]
             ready, not_ready = ray.wait(refs, timeout=5)
             for ref in ready:
                 val, pid = ray.get(ref)
-                responses[val].add(pid)
+                if val is not None and pid is not None:
+                    responses[val].add(pid)
             for ref in not_ready:
                 blocking.extend(not_ready)
 
@@ -577,7 +587,6 @@ def test_reconfigure_with_queries(serve_instance):
     assert ray.get(handle.remote()) == 2
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Failing on Windows.")
 @pytest.mark.parametrize("use_handle", [True, False])
 def test_redeploy_scale_down(serve_instance, use_handle):
     # Tests redeploying with a new version and lower num_replicas.
@@ -591,22 +600,29 @@ def test_redeploy_scale_down(serve_instance, use_handle):
     def call():
         if use_handle:
             handle = v1.get_handle()
-            ret = ray.get(handle.remote())
+            ret = ray.get(handle.remote()).split("|")
         else:
-            ret = requests.get(f"http://localhost:8000/{name}").text
+            ret = requests.get(f"http://localhost:8000/{name}")
 
-        return ret.split("|")[0], ret.split("|")[1]
+            if ret.status_code != 200 or len(ret.text.split("|")) != 2:
+                return (None, None)
+
+            ret = ret.text.split("|")
+
+        return ret[0], ret[1]
 
     def make_calls(expected):
         # Returns dict[val, set(pid)].
         responses = defaultdict(set)
+        timeout_value = 500 if sys.platform == "win32" else 30
         start = time.time()
-        while time.time() - start < 30:
+        while time.time() - start < timeout_value:
             refs = [call.remote() for _ in range(10)]
             ready, not_ready = ray.wait(refs, timeout=5)
             for ref in ready:
                 val, pid = ray.get(ref)
-                responses[val].add(pid)
+                if val is not None and pid is not None:
+                    responses[val].add(pid)
 
             if all(len(responses[val]) == num for val, num in expected.items()):
                 break
@@ -628,7 +644,6 @@ def test_redeploy_scale_down(serve_instance, use_handle):
     assert all(pid not in pids1 for pid in responses2["2"])
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Failing on Windows.")
 @pytest.mark.parametrize("use_handle", [True, False])
 def test_redeploy_scale_up(serve_instance, use_handle):
     # Tests redeploying with a new version and higher num_replicas.
@@ -642,22 +657,29 @@ def test_redeploy_scale_up(serve_instance, use_handle):
     def call():
         if use_handle:
             handle = v1.get_handle()
-            ret = ray.get(handle.remote())
+            ret = ray.get(handle.remote()).split("|")
         else:
-            ret = requests.get(f"http://localhost:8000/{name}").text
+            ret = requests.get(f"http://localhost:8000/{name}")
 
-        return ret.split("|")[0], ret.split("|")[1]
+            if ret.status_code != 200 or len(ret.text.split("|")) != 2:
+                return (None, None)
+
+            ret = ret.text.split("|")
+
+        return ret[0], ret[1]
 
     def make_calls(expected):
         # Returns dict[val, set(pid)].
         responses = defaultdict(set)
+        timeout_value = 500 if sys.platform == "win32" else 30
         start = time.time()
-        while time.time() - start < 30:
+        while time.time() - start < timeout_value:
             refs = [call.remote() for _ in range(10)]
             ready, not_ready = ray.wait(refs, timeout=5)
             for ref in ready:
                 val, pid = ray.get(ref)
-                responses[val].add(pid)
+                if val is not None and pid is not None:
+                    responses[val].add(pid)
 
             if all(len(responses[val]) == num for val, num in expected.items()):
                 break
@@ -1421,6 +1443,4 @@ class DecoratedClass:
 
 
 if __name__ == "__main__":
-    import sys
-
     sys.exit(pytest.main(["-v", "-s", __file__]))
