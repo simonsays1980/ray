@@ -94,6 +94,31 @@ def test_handle_serializable_in_deployment_init(serve_instance):
         RayServer2.deploy(rs1_handle)
 
 
+def test_handle_serializable_in_deployment_init(serve_instance):
+    """Test that a handle can be passed into a constructor (#22110)"""
+
+    @serve.deployment
+    class RayServer1:
+        def __init__(self):
+            pass
+
+        def __call__(self, *args):
+            return {"count": self.count}
+
+    @serve.deployment
+    class RayServer2:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def __call__(self, *args):
+            return {"count": self.count}
+
+    RayServer1.deploy()
+    for sync in [True, False]:
+        rs1_handle = RayServer1.get_handle(sync=sync)
+        RayServer2.deploy(rs1_handle)
+
+
 def test_sync_handle_in_thread(serve_instance):
     @serve.deployment
     def f():
