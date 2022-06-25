@@ -29,12 +29,12 @@ from ray.tune.result import (
     CONFIG_PREFIX,
     TRAINING_ITERATION,
 )
-from ray.tune.trial import Trial
-from ray.tune.trial_runner import (
+from ray.tune.experiment import Trial
+from ray.tune.execution.trial_runner import (
     find_newest_experiment_checkpoint,
     load_trial_from_checkpoint,
 )
-from ray.tune.utils.trainable import TrainableUtil
+from ray.tune.trainable.util import TrainableUtil
 from ray.tune.utils.util import unflattened_lookup
 
 from ray.util.annotations import PublicAPI
@@ -440,7 +440,8 @@ class ExperimentAnalysis:
             # Support metrics given as paths, e.g.
             # "info/learner/default_policy/policy_loss".
             return [
-                (c.value, unflattened_lookup(metric, c.result)) for c in checkpoints
+                (c.dir_or_data, unflattened_lookup(metric, c.metrics))
+                for c in checkpoints
             ]
         else:
             raise ValueError("trial should be a string or a Trial instance.")

@@ -10,10 +10,10 @@ import urllib
 
 from ray import logger
 from ray.tune import Trainable
-from ray.tune.function_runner import FunctionRunner
+from ray.tune.trainable import FunctionTrainable
 from ray.tune.logger import LoggerCallback
 from ray.tune.utils import flatten_dict
-from ray.tune.trial import Trial
+from ray.tune.experiment import Trial
 
 import yaml
 
@@ -43,6 +43,8 @@ def _clean_log(obj: Any):
         return {k: _clean_log(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [_clean_log(v) for v in obj]
+    elif isinstance(obj, tuple):
+        return tuple(_clean_log(v) for v in obj)
     elif _is_allowed_type(obj):
         return obj
 
@@ -425,7 +427,7 @@ class WandbLoggerCallback(LoggerCallback):
     def log_trial_save(self, trial: "Trial"):
         if self.save_checkpoints and trial.checkpoint:
             self._trial_queues[trial].put(
-                (_QueueItem.CHECKPOINT, trial.checkpoint.value)
+                (_QueueItem.CHECKPOINT, trial.checkpoint.dir_or_data)
             )
 
     def log_trial_end(self, trial: "Trial", failed: bool = False):
@@ -488,7 +490,7 @@ class WandbTrainableMixin:
             )
 
         # Grouping
-        if isinstance(self, FunctionRunner):
+        if isinstance(self, FunctionTrainable):
             default_group = self._name
         else:
             default_group = type(self).__name__
