@@ -24,7 +24,7 @@ import gym
 import gym_minigrid
 import ray
 
-from ray.rllib.agents.ppo.ppo import PPOConfig
+from ray.rllib.algorithms.ppo.ppo import PPOConfig
 from ray import tune
 from ray.tune.registry import register_env
 from ray.rllib.utils.exploration.callbacks import NovelDMetricsCallbacks
@@ -55,7 +55,7 @@ config = (
         num_rollout_workers=0,
         # In practice using standardized observations in the distillation
         # results in a more stable training.
-        observation_filter=lambda _: tune.grid_search(["NoFilter", "MeanStdFilter"]),
+        observation_filter=tune.grid_search(["NoFilter", "MeanStdFilter"]),
     )
     .training(
         gamma=0.999,

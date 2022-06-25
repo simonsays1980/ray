@@ -106,11 +106,11 @@ class RND(Exploration):
 
         super().__init__(action_space, framework=framework, model=model, **kwargs)
 
-        if self.policy_config["num_workers"] != 0:
-            raise ValueError(
-                "RND exploration currently does not support parallelism."
-                " `num_workers` must be 0!"
-            )
+        # if self.policy_config["num_workers"] != 0:
+        #     raise ValueError(
+        #         "RND exploration currently does not support parallelism."
+        #         " `num_workers` must be 0!"
+        #     )
 
         self.embed_dim = embed_dim
         # In case no configuration is passed in, use the Policy's model config.
@@ -307,21 +307,9 @@ class RND(Exploration):
 
     def _postprocess_torch(self, policy, sample_batch):
         """Calculates the intrinsic reward and updates the parameters."""
-        # Push observations through the distillation networks.
-        phi, _ = self.model._distill_predictor_net(
-            {
-                SampleBatch.OBS: torch.from_numpy(sample_batch[SampleBatch.OBS]),
-            }
-        )
-        phi_target, _ = self._distill_target_net(
-            {
-                SampleBatch.OBS: torch.from_numpy(sample_batch[SampleBatch.OBS]),
-            }
-        )
-        # Avoid dividing by zero in the gradient by adding a small epsilon.
-        novelty = torch.norm(phi - phi_target + 1e-12, dim=1)
+        
+        novelty = self._compute_novelty(torch.from_numpy(sample_batch[SampleBatch.OBS]))
         self._novelty_np = novelty.detach().cpu().numpy()
-
         # Calculate the intrinsic reward.
         self._compute_intrinsic_reward(sample_batch)
 
@@ -333,14 +321,57 @@ class RND(Exploration):
             sample_batch[SampleBatch.REWARDS] + self._intrinsic_reward_np
         )
 
+        return sample_batch
         # Perform an optimizer step.
+        # distill_loss = torch.mean(novelty)
+        # self._optimizer.zero_grad()
+        # distill_loss.backward()
+        # self._optimizer.step()
+
+        # return sample_batch
+
+    def _compute_loss_and_update(self, sample_batch):
+        
+        
+        novelty = self._compute_novelty(sample_batch[SampleBatch.OBS])
+        # Policy is LSTM: Padded sequence mean_valid(novelty) from PPO         
         distill_loss = torch.mean(novelty)
         self._optimizer.zero_grad()
         distill_loss.backward()
         self._optimizer.step()
-
-        return sample_batch
-
+        
+        # If logging to TensorBoard return the distill_loss
+        
+    def _compute_novelty(self, obs): 
+        # Push observations through the distillation networks.
+        phi, _ = self.model._distill_predictor_net(
+            {
+                SampleBatch.OBS: obs,
+            }
+        )
+        phi_target, _ = self._distill_target_net(
+            {
+                SampleBatch.OBS: obs,
+            }
+        )
+        # Avoid dividing by zero in the gradient by adding a small epsilon.
+        novelty = torch.norm(phi - phi_target + 1e-12, dim=1)
+        #
+        return novelty
+        
+        
     def _compute_intrinsic_reward(self, sample_batch):
         """Computes the intrinsic reward."""
         self._intrinsic_reward_np = self._novelty_np
+
+    def loss(
+        self,
+        model: ModelV2,
+        dist_class: Type[ActionDistribution],
+        train_batch: SampleBatch,
+    ) -> Union[TensorType, List[TensorType]]:
+        total_loss = super(RNDPolicy, self).loss(model, dist_class, train_batch)
+        
+        self.exploration._compute_loss_and_update(train_batch)
+        
+        return total_loss
