@@ -8,7 +8,11 @@ from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.utils.annotations import DeveloperAPI
 from ray.rllib.utils.deprecation import Deprecated
 from ray.rllib.utils.framework import try_import_torch, TensorType
-from ray.rllib.utils.typing import LocalOptimizer, AlgorithmConfigDict
+from ray.rllib.utils.typing import (
+    LocalOptimizer, 
+    AlgorithmConfigDict,
+    ModelWeights
+)
 
 if TYPE_CHECKING:
     from ray.rllib.policy.policy import Policy
@@ -60,6 +64,9 @@ class Exploration:
             params = list(self.model.parameters())
             if params:
                 self.device = params[0].device
+                
+        # Indicates, if exploration algorithm adds another loss term.
+        self.add_loss = False
 
     @DeveloperAPI
     def before_compute_actions(
@@ -216,7 +223,15 @@ class Exploration:
             sess: An optional tf Session object to use.
         """
         pass
-
+    
+    @DeveloperAPI
+    def get_weights(self) -> ModelWeights:
+        pass
+    
+    @DeveloperAPI
+    def set_weights(self, weights: ModelWeights):
+        pass
+    
     @Deprecated(new="get_state", error=False)
     def get_info(self, sess: Optional["tf.Session"] = None):
         return self.get_state(sess)

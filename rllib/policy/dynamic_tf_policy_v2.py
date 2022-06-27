@@ -653,6 +653,9 @@ class DynamicTFPolicyV2(TFPolicy):
         optimizers = force_list(self.optimizer())
         if getattr(self, "exploration", None):
             optimizers = self.exploration.get_exploration_optimizer(optimizers)
+            # Also add exploration loss if necessary.
+            if self.exploration.add_loss:
+                self.maybe_add_loss()
 
         # No optimizers produced -> Return.
         if not optimizers:
@@ -687,6 +690,23 @@ class DynamicTFPolicyV2(TFPolicy):
 
         # Initialize again after loss and tower init.
         self.get_session().run(tf1.global_variables_initializer())
+
+    def maybe_add_loss(self):
+        from ray.rllib.models.action_dist import ActionDistribution
+        policy_loss = self.loss
+
+        def loss(
+            self,
+            model: ModelV2,
+            dist_class: Type[ActionDistribution],
+            train_batch: SampleBatch,
+        ) -> Union[TensorType, List[TensorType]]:
+
+            self.exploration._compute_loss_and_update(train_batch)
+
+            return policy_loss(model, dist_class, train_batch)
+
+        self.loss = loss
 
     @override(Policy)
     def _initialize_loss_from_dummy_batch(

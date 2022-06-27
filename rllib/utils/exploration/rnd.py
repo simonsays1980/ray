@@ -13,7 +13,13 @@ from ray.rllib.utils.exploration import Exploration
 from ray.rllib.utils.framework import try_import_tf, try_import_torch
 from ray.rllib.utils.from_config import from_config
 from ray.rllib.utils.tf_utils import get_placeholder
-from ray.rllib.utils.typing import FromConfigSpec, ModelConfigDict, TensorType
+from ray.rllib.utils.typing import (
+    FromConfigSpec, 
+    ModelConfigDict,
+    ModelWeights, 
+    TensorType
+)
+from ray.rllib.utils.torch_utils import convert_to_torch_tensor
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +118,7 @@ class RND(Exploration):
         #         " `num_workers` must be 0!"
         #     )
 
+        self.add_loss = True
         self.embed_dim = embed_dim
         # In case no configuration is passed in, use the Policy's model config.
         # it has the same input dimensions as needed for the distill network.
@@ -243,6 +250,15 @@ class RND(Exploration):
         This can be used for metrics. See the `RNDMetricsCallbacks`.
         """
         return (self._intrinsic_reward_np,)
+    
+    @override(Exploration)
+    def get_weights(self) -> ModelWeights:
+        return {k: v.cpu().detach().numpy() for k, v in self._distill_predictor_net.state_dict().items()}
+    
+    @override(Exploration)
+    def set_weights(self, weights: ModelWeights):
+        weights = convert_to_torch_tensor(weights, device=self.device)
+        self._distill_predictor_net.load_state_dict(weights)
 
     def _postprocess_tf(self, policy, sample_batch, tf_sess):
         """Calculates the intrinsic reward and updates the parameters."""
@@ -308,7 +324,7 @@ class RND(Exploration):
     def _postprocess_torch(self, policy, sample_batch):
         """Calculates the intrinsic reward and updates the parameters."""
         
-        novelty = self._compute_novelty(torch.from_numpy(sample_batch[SampleBatch.OBS]))
+        novelty = self._compute_novelty(torch.from_numpy(sample_batch[SampleBatch.OBS]).to(policy.device))
         self._novelty_np = novelty.detach().cpu().numpy()
         # Calculate the intrinsic reward.
         self._compute_intrinsic_reward(sample_batch)
@@ -330,10 +346,9 @@ class RND(Exploration):
 
         # return sample_batch
 
-    def _compute_loss_and_update(self, sample_batch):
+    def _compute_loss_and_update(self, sample_batch, policy):
         
-        
-        novelty = self._compute_novelty(sample_batch[SampleBatch.OBS])
+        novelty = self._compute_novelty(sample_batch[SampleBatch.OBS].to(policy.device))
         # Policy is LSTM: Padded sequence mean_valid(novelty) from PPO         
         distill_loss = torch.mean(novelty)
         self._optimizer.zero_grad()
@@ -362,16 +377,4 @@ class RND(Exploration):
         
     def _compute_intrinsic_reward(self, sample_batch):
         """Computes the intrinsic reward."""
-        self._intrinsic_reward_np = self._novelty_np
-
-    def loss(
-        self,
-        model: ModelV2,
-        dist_class: Type[ActionDistribution],
-        train_batch: SampleBatch,
-    ) -> Union[TensorType, List[TensorType]]:
-        total_loss = super(RNDPolicy, self).loss(model, dist_class, train_batch)
-        
-        self.exploration._compute_loss_and_update(train_batch)
-        
-        return total_loss
+        self._intrinsic_reward_np = self._novelty_np * self.intrinsic_reward_coeff

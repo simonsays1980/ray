@@ -440,8 +440,30 @@ class TorchPolicyV2(Policy):
             optimizers = [torch.optim.Adam(self.model.parameters())]
         if getattr(self, "exploration", None):
             optimizers = self.exploration.get_exploration_optimizer(optimizers)
+            # Also add exploration loss terms if necessary.
+            if self.exploration.add_loss:
+                self.maybe_add_loss()
         return optimizers
 
+    def maybe_add_loss(self):
+        from ray.rllib.models.action_dist import ActionDistribution
+        import types
+        #setattr(self, "policy_loss", types.MethodType(self.loss, self))
+        self.policy_loss = self.loss.__get__(self, type(self))
+
+        def loss(
+            self,
+            model: ModelV2,
+            dist_class: ActionDistribution,
+            train_batch: SampleBatch,
+        ) -> Union[TensorType, List[TensorType]]:
+
+            self.exploration._compute_loss_and_update(train_batch, self)
+
+            return self.policy_loss(model, dist_class, train_batch)
+
+        self.loss = loss.__get__(self, type(self))#types.MethodType(loss, self)
+        
     def _init_model_and_dist_class(self):
         if is_overridden(self.make_model) and is_overridden(
             self.make_model_and_action_dist
@@ -870,6 +892,12 @@ class TorchPolicyV2(Policy):
     def get_weights(self) -> ModelWeights:
         return {k: v.cpu().detach().numpy() for k, v in self.model.state_dict().items()}
 
+    def get_exploration_weights(self) -> ModelWeights:
+        return self.exploration.get_weights()
+    
+    def set_exploration_weights(self, weights: ModelWeights):
+        self.exploration.set_weights(weights)
+    
     @override(Policy)
     @DeveloperAPI
     def set_weights(self, weights: ModelWeights) -> None:
