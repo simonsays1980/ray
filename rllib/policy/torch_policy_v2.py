@@ -448,7 +448,8 @@ class TorchPolicyV2(Policy):
     def maybe_add_loss(self):
         from ray.rllib.models.action_dist import ActionDistribution
         import types
-        #setattr(self, "policy_loss", types.MethodType(self.loss, self))
+
+        # setattr(self, "policy_loss", types.MethodType(self.loss, self))
         self.policy_loss = self.loss.__get__(self, type(self))
 
         def loss(
@@ -462,8 +463,8 @@ class TorchPolicyV2(Policy):
 
             return self.policy_loss(model, dist_class, train_batch)
 
-        self.loss = loss.__get__(self, type(self))#types.MethodType(loss, self)
-        
+        self.loss = loss.__get__(self, type(self))  # types.MethodType(loss, self)
+
     def _init_model_and_dist_class(self):
         if is_overridden(self.make_model) and is_overridden(
             self.make_model_and_action_dist
@@ -894,10 +895,10 @@ class TorchPolicyV2(Policy):
 
     def get_exploration_weights(self) -> ModelWeights:
         return self.exploration.get_weights()
-    
+
     def set_exploration_weights(self, weights: ModelWeights):
         self.exploration.set_weights(weights)
-    
+
     @override(Policy)
     @DeveloperAPI
     def set_weights(self, weights: ModelWeights) -> None:

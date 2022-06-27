@@ -14,10 +14,10 @@ from ray.rllib.utils.framework import try_import_tf, try_import_torch
 from ray.rllib.utils.from_config import from_config
 from ray.rllib.utils.tf_utils import get_placeholder
 from ray.rllib.utils.typing import (
-    FromConfigSpec, 
+    FromConfigSpec,
     ModelConfigDict,
-    ModelWeights, 
-    TensorType
+    ModelWeights,
+    TensorType,
 )
 from ray.rllib.utils.torch_utils import convert_to_torch_tensor
 
@@ -250,11 +250,14 @@ class RND(Exploration):
         This can be used for metrics. See the `RNDMetricsCallbacks`.
         """
         return (self._intrinsic_reward_np,)
-    
+
     @override(Exploration)
     def get_weights(self) -> ModelWeights:
-        return {k: v.cpu().detach().numpy() for k, v in self._distill_predictor_net.state_dict().items()}
-    
+        return {
+            k: v.cpu().detach().numpy()
+            for k, v in self._distill_predictor_net.state_dict().items()
+        }
+
     @override(Exploration)
     def set_weights(self, weights: ModelWeights):
         weights = convert_to_torch_tensor(weights, device=self.device)
@@ -323,8 +326,10 @@ class RND(Exploration):
 
     def _postprocess_torch(self, policy, sample_batch):
         """Calculates the intrinsic reward and updates the parameters."""
-        
-        novelty = self._compute_novelty(torch.from_numpy(sample_batch[SampleBatch.OBS]).to(policy.device))
+
+        novelty = self._compute_novelty(
+            torch.from_numpy(sample_batch[SampleBatch.OBS]).to(policy.device)
+        )
         self._novelty_np = novelty.detach().cpu().numpy()
         # Calculate the intrinsic reward.
         self._compute_intrinsic_reward(sample_batch)
@@ -347,17 +352,17 @@ class RND(Exploration):
         # return sample_batch
 
     def _compute_loss_and_update(self, sample_batch, policy):
-        
+
         novelty = self._compute_novelty(sample_batch[SampleBatch.OBS].to(policy.device))
-        # Policy is LSTM: Padded sequence mean_valid(novelty) from PPO         
+        # Policy is LSTM: Padded sequence mean_valid(novelty) from PPO
         distill_loss = torch.mean(novelty)
         self._optimizer.zero_grad()
         distill_loss.backward()
         self._optimizer.step()
-        
+
         # If logging to TensorBoard return the distill_loss
-        
-    def _compute_novelty(self, obs): 
+
+    def _compute_novelty(self, obs):
         # Push observations through the distillation networks.
         phi, _ = self.model._distill_predictor_net(
             {
@@ -373,8 +378,7 @@ class RND(Exploration):
         novelty = torch.norm(phi - phi_target + 1e-12, dim=1)
         #
         return novelty
-        
-        
+
     def _compute_intrinsic_reward(self, sample_batch):
         """Computes the intrinsic reward."""
         self._intrinsic_reward_np = self._novelty_np * self.intrinsic_reward_coeff

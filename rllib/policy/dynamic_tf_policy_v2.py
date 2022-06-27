@@ -693,6 +693,7 @@ class DynamicTFPolicyV2(TFPolicy):
 
     def maybe_add_loss(self):
         from ray.rllib.models.action_dist import ActionDistribution
+
         policy_loss = self.loss
 
         def loss(

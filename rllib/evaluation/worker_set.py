@@ -215,7 +215,9 @@ class WorkerSet:
         weights = None
         if self.remote_workers() or from_worker is not None:
             weights = (from_worker or self.local_worker()).get_weights(policies)
-            exploration_weights = (from_worker or self.local_worker()).get_exploration_weights(policies)
+            exploration_weights = (
+                from_worker or self.local_worker()
+            ).get_exploration_weights(policies)
             # Put weights only once into object store and use same object
             # ref to synch to all workers.
             weights_ref = ray.put(weights)
