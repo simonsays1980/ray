@@ -1,6 +1,42 @@
+from dataclasses import dataclass
+from typing import Dict, Optional, Union
+
 import torch
-from typing import Dict
-from ray.rllib2.algorithms.callbacks import RLlibCallbacks
+from torch.nn import nn
+
+from ray.rllib2.algorithms.callbacks import (
+    CallbacksConfig,
+    RLlibCallbacks
+)
+from ray.rllib2.models.configs import ModelConfig
+from ray.rllib2.models.torch.encoder import ModelWithEncoder
+
+ModuleType = Union[nn.Module, "tf.Module"]
+@dataclass
+class RNDCallbacksConfig(CallbacksConfig):
+    is_trained: bool = True    
+    # @kourosh: We could also use a class inheritance from ModelConfig
+    # instead. But imo this approach here is cleaner, as it 
+    # is a Callback.
+    distill_net_config: ModelConfig = None
+    # Embedding dimension for the distillation.
+    embedding_dim: int = 128
+    # Optimizer config.
+    optimizer_config: 
+    # Learning rate for the distillation optimizer.
+    lr: float = 1e-5
+    # If a nonepisodic value head should be used.
+    non_episodic_returns: bool = False
+    gamma: float = 0.99
+    lambda_: float = 0.95
+    vf_loss_coeff: float = 0.4
+    adv_int_coeff: float = 0.04
+    adv_ext_coeff: float = 0.02
+    # If intrinsic reward should be normalized. 
+    normalize: bool = True
+    # Exploration to use for actions.
+    sub_exploration: CallbacksConfig = None
+    
 
 class RNDExplorationCallbacks(RLlibCallbacks):
     
@@ -8,38 +44,35 @@ class RNDExplorationCallbacks(RLlibCallbacks):
         # Initialize super.
         super().__init__(config=config)
         self.config = config
-        self.distill_net_config = config.get("distill_net_config", None)
-        if not self.distill_net_config:
-            self.distill_net_config = config.get("model_config").copy()
+        # Get the config for the distillation networks.
+        self.distill_net_config = config.get("distill_net_config").copy()        
+        self.embedding_dim = config.get("embedding_dim")        
         
-        self.embed_dim = config.get("embed_dim")
-        self.lr = config.get("lr")
+        # @kourosh: Here it would be good to make the encoder of Pi, QF, 
+        # or VF net available. So parameter sharing could be used in 
+        # the `distill_net` (not the distill_Target_net).
+        self.distill_net = ModelWithEncoder(self.distill_net_config)
+        self.distill_target_net = ModelWithEncoder(self.distill_target_net)
         
-        self.distill_predictor_net = model_catalog.make_mlp(
-            obs_space=self.config.obs_space,
-            embed_dim=self.embed_dim,
-            mlp_config=self.distill_net_config,
-        )
-        
-        self.distill_target_net = model_catalog.make_mlp(
-            obs_space=self.config.obs_space,
-            embed_dim=self.embed_dim,
-            mlp_config=self.distill_net_config,
-        )
         
         self.non_episodic_returns = self.config.non_episodic_returns
         if self.non_episodic_returns:
-            """Get access to the encoder of the policy!!!"""
-            self.encoder = self.rl_modules["agent_module"].encoder
-            self.nonepisodic_vf = model_catalog.make_vf(
+            # @kourosh: Get access to the encoder of the Pi, VF, or QF. 
+            # This is necessary for the RND algorithm to work properly.
+            # Furthermore, this should also be optimized by the RLModule's 
+            # optimizer corresponding to the Pi, QF, or VF function.                        
+            self.non_episodic_vf = model_catalog.make_vf(
                 obs_space=self.config.obs_space,
                 action_space=self.config.action_space,
                 vf_config=self.config.vf
             )
+            # Set the encoder to the policy's networks' encoder.
+            self.non_episodic_vf.set_encoder(self.rl_modules["default_policy"].encoder)            
+            # Add the parameters to the policy's networks' optimizer.
+            
             
             self.gamma = self.config.gamma
             self.lambda_ = self.config.lambda_
-            """Use also here the policies vf_loss_coeff"""
             self.vf_loss_coeff = self.config.vf_loss_coeff
             self.adv_int_coeff = self.config.adv_int_coeff
             self.adv_ext_coeff = self.config.adv_ext_coeff
@@ -49,12 +82,13 @@ class RNDExplorationCallbacks(RLlibCallbacks):
         self._moving_mean_std = None
         self.sub_exploration = self.config.get("sub_exploration", None)
         if self.sub_exploration is None:
+            # Define Stochastic Sampling here.
             sub_exploration = {}
         
     def on_make_optimizer(self):
         """Create an optimizer for the distill_net"""
         config = self.config.optimizer_config
-        self.optimizer = torch.optim.Adam(self.distill_predictor_net.parameters(), lr=self.lr)
+        self.optimizer = torch.optim.Adam(self.distill_predictor_net.parameters(), lr=config.lr)
         
         # If nonepisodic returns are calculated add the loss
         # to the loss of the RLTrainer loss.
@@ -89,28 +123,3 @@ class RNDExplorationCallbacks(RLlibCallbacks):
             })
             # Then the nonepisodic VF network has to be optimized by the RLTrainer.
             return loss_out
-        
-        
-            
-            
-            
-        
-        
-        
-    
-            
-    
-
-        
-        
-        
-        
-        
-            
-            
-            
-        
-        
-        
-        
-        

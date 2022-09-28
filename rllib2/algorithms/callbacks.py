@@ -1,7 +1,13 @@
+from dataclasses import dataclass
 
-class RLlibCallbacks:
+from ray.tune.callback import _CallbackMeta
+@dataclass
+class CallbacksConfig:
+    is_trained: bool = None
     
-    def __init__(self, config: CallbackConfig):
+class RLlibCallbacks(metaclass=_CallbackMeta):
+    
+    def __init__(self, config: CallbacksConfig):
         """
         The CallbackConfig should be used to transport infos from the main config
         to the callback, e.g. model_config, etc.
