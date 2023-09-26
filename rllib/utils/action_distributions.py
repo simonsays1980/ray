@@ -1,6 +1,6 @@
 def check_if_diag_gaussian(action_distribution_cls, framework):
     """Checks, if `free_log_std` can be used.
-    
+
     This is only supported for an DiagGaussian heritage in this library.
     """
     if framework == "torch":
