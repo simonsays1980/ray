@@ -1,6 +1,6 @@
 from collections import deque
 import copy
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -197,6 +197,8 @@ class EpisodeReplayBuffer(ReplayBufferInterface):
         *,
         batch_size_B: Optional[int] = None,
         batch_length_T: Optional[int] = None,
+        use_n_step: bool = False,
+        n_step: Optional[Union[int, Tuple]] = None,
     ) -> SampleBatchType:
         """Returns a batch of size B (number of "rows"), where each row has length T.
 
@@ -226,7 +228,11 @@ class EpisodeReplayBuffer(ReplayBufferInterface):
 
         # Use our default values if no sizes/lengths provided.
         batch_size_B = batch_size_B or self.batch_size_B
-        batch_length_T = batch_length_T or self.batch_length_T
+        if use_n_step:
+            n_step = self.rng.integers(1, n_step or 2)
+            batch_length_T = n_step + 1
+        else:
+            batch_length_T = batch_length_T or self.batch_length_T
 
         # Rows to return.
         observations = [[] for _ in range(batch_size_B)]
@@ -306,15 +312,30 @@ class EpisodeReplayBuffer(ReplayBufferInterface):
         self.sampled_timesteps += batch_size_B * batch_length_T
 
         # TODO: Return SampleBatch instead of this simpler dict.
-        ret = {
-            "obs": np.array(observations),
-            "actions": np.array(actions),
-            "rewards": np.array(rewards),
-            "is_first": np.array(is_first),
-            "is_last": np.array(is_last),
-            "is_terminated": np.array(is_terminated),
-            "is_truncated": np.array(is_truncated),
-        }
+        if use_n_step:
+            # TODO (simon): Include gamma!
+            ret = {
+                "obs": np.array(observations[:, 0]),
+                # Store the action taken at `"obs"`.
+                "actions": np.array(observations[:, 0]),
+                # Sum all the rewards from the second obs onwards.
+                # Note, rewards start with a `0.0`` dummy at `t=0`.
+                "rewards": np.array(rewards[:, 1:]).sum(axis=1),
+                # Take the last observation as the `"new"` one.
+                "new_obs": np.array(observations[:, -1]),
+                "is_terminated": np.array(is_terminated[:-1]),
+                "is_truncated": np.array(is_truncated[:-1]),
+            }
+        else:
+            ret = {
+                "obs": np.array(observations),
+                "actions": np.array(actions),
+                "rewards": np.array(rewards),
+                "is_first": np.array(is_first),
+                "is_last": np.array(is_last),
+                "is_terminated": np.array(is_terminated),
+                "is_truncated": np.array(is_truncated),
+            }
 
         return ret
 
