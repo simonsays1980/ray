@@ -139,6 +139,42 @@ class TestEpisodeReplayBuffer(unittest.TestCase):
             # (reset rewards).
             assert np.all(np.where(is_terminated[:, :-1], rewards[:, 1:] == 0.0, True))
 
+        # Test n-step sampling.
+        for _ in range(1000):
+            sample = buffer.sample(
+                batch_size_B=16, batch_length_T=64, use_n_step=True, n_step=3
+            )
+            obs, actions, rewards, new_obs, is_terminated, is_truncated = (
+                sample["obs"],
+                sample["actions"],
+                sample["rewards"],
+                sample["new_obs"],
+                sample["is_terminated"],
+                sample["is_truncated"],
+            )
+            # Make sure terminated and truncated are never both True.
+            assert not np.any(np.logical_and(is_truncated, is_terminated))
+
+            # All fields have same shape.
+            assert (
+                obs.shape
+                == rewards.shape
+                == actions.shape
+                == is_terminated.shape
+                == is_truncated.shape
+            )
+
+            # Make sure, "new_obs" comes after "obs".
+            assert np.all(np.equal(obs + 3, new_obs))
+            # Make sure the action comes from the same time step as "obs",
+            assert np.all(np.equal(obs, actions))
+
+            # All rewards match obs.
+            discounted_rewards = (
+                obs + 1 + (obs + 2) * 0.99 + (obs + 3) * 0.99**2
+            ) * 0.1
+            assert np.all(np.equal(discounted_rewards, rewards))
+
 
 if __name__ == "__main__":
     import pytest

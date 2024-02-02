@@ -1,8 +1,9 @@
 from collections import deque
 import copy
+import numpy as np
+import scipy
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import numpy as np
 
 from ray.rllib.env.single_agent_episode import SingleAgentEpisode
 from ray.rllib.utils.annotations import override
@@ -199,6 +200,7 @@ class EpisodeReplayBuffer(ReplayBufferInterface):
         batch_length_T: Optional[int] = None,
         use_n_step: bool = False,
         n_step: Optional[Union[int, Tuple]] = None,
+        gamma: int = 0.99,
     ) -> SampleBatchType:
         """Returns a batch of size B (number of "rows"), where each row has length T.
 
@@ -229,7 +231,10 @@ class EpisodeReplayBuffer(ReplayBufferInterface):
         # Use our default values if no sizes/lengths provided.
         batch_size_B = batch_size_B or self.batch_size_B
         if use_n_step:
-            n_step = self.rng.integers(1, n_step or 2)
+            if n_step is None:
+                n_step = self.rng.integers(1, 5)
+            elif isinstance(n_step, tuple):
+                n_step = self.rng.integers(n_step[0], n_step[1])
             batch_length_T = n_step + 1
         else:
             batch_length_T = batch_length_T or self.batch_length_T
@@ -313,18 +318,20 @@ class EpisodeReplayBuffer(ReplayBufferInterface):
 
         # TODO: Return SampleBatch instead of this simpler dict.
         if use_n_step:
-            # TODO (simon): Include gamma!
+            discounted_rewards = scipy.signal.lfilter(
+                [1], [1, -gamma], np.array(rewards)[:, 1::][:, ::-1], axis=1
+            )[:, -1, np.newaxis]
             ret = {
-                "obs": np.array(observations[:, 0]),
+                "obs": np.array(observations)[:, 0, np.newaxis],
                 # Store the action taken at `"obs"`.
-                "actions": np.array(observations[:, 0]),
+                "actions": np.array(actions)[:, 0, np.newaxis],
                 # Sum all the rewards from the second obs onwards.
                 # Note, rewards start with a `0.0`` dummy at `t=0`.
-                "rewards": np.array(rewards[:, 1:]).sum(axis=1),
+                "rewards": discounted_rewards,
                 # Take the last observation as the `"new"` one.
-                "new_obs": np.array(observations[:, -1]),
-                "is_terminated": np.array(is_terminated[:-1]),
-                "is_truncated": np.array(is_truncated[:-1]),
+                "new_obs": np.array(observations)[:, -1, np.newaxis],
+                "is_terminated": np.array(is_terminated)[:, -1, np.newaxis],
+                "is_truncated": np.array(is_truncated)[:, -1, np.newaxis],
             }
         else:
             ret = {
