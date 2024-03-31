@@ -297,7 +297,7 @@ class FaultTolerantActorManager:
             self._next_id += 1
 
     def _remove_async_state(self, actor_id: int):
-        """Remove internal async state of for a given actor.
+        """Remove internal async state of a given actor.
 
         This is called when an actor is removed from the pool or being marked
         unhealthy.

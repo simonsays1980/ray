@@ -3,6 +3,7 @@ This file holds framework-agnostic components for DreamerV3's RLModule.
 """
 
 import abc
+from typing import Any, Mapping
 
 import gymnasium as gym
 import numpy as np
@@ -29,20 +30,13 @@ _, tf, _ = try_import_tf()
 class DreamerV3RLModule(RLModule, abc.ABC):
     @override(RLModule)
     def setup(self):
+        super().setup()
+
         # Gather model-relevant settings.
         B = 1
         T = self.config.model_config_dict["batch_length_T"]
         horizon_H = self.config.model_config_dict["horizon_H"]
         gamma = self.config.model_config_dict["gamma"]
-        symlog_obs = do_symlog_obs(
-            self.config.observation_space,
-            self.config.model_config_dict.get("symlog_obs", "auto"),
-        )
-        model_size = self.config.model_config_dict["model_size"]
-
-        if self.config.model_config_dict["use_float16"]:
-            tf.compat.v1.keras.layers.enable_v2_dtype_behavior()
-            tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
         # Build encoder and decoder from catalog.
         catalog = self.config.get_catalog()
@@ -50,26 +44,17 @@ class DreamerV3RLModule(RLModule, abc.ABC):
         self.decoder = catalog.build_decoder(framework=self.framework)
 
         # Build the world model (containing encoder and decoder).
-        self.world_model = WorldModel(
-            model_size=model_size,
-            observation_space=self.config.observation_space,
-            action_space=self.config.action_space,
-            batch_length_T=T,
+        self.world_model = catalog.build_world_model(
+            framework=self.framework,
             encoder=self.encoder,
             decoder=self.decoder,
-            symlog_obs=symlog_obs,
         )
-        self.actor = ActorNetwork(
-            action_space=self.config.action_space,
-            model_size=model_size,
-        )
-        self.critic = CriticNetwork(
-            model_size=model_size,
-        )
+        self.actor = catalog.build_actor(framework=self.framework)
+        self.critic = catalog.build_critic(framework=self.framework)
+
         # Build the final dreamer model (containing the world model).
-        self.dreamer_model = DreamerModel(
-            model_size=self.config.model_config_dict["model_size"],
-            action_space=self.config.action_space,
+        self.dreamer_model = catalog.build_dreamer_model(
+            framework=self.framework,
             world_model=self.world_model,
             actor=self.actor,
             critic=self.critic,
@@ -79,11 +64,11 @@ class DreamerV3RLModule(RLModule, abc.ABC):
         self.action_dist_cls = catalog.get_action_dist_cls(framework=self.framework)
 
         # Perform a test `call()` to force building the dreamer model's variables.
-        test_obs = np.tile(
-            np.expand_dims(self.config.observation_space.sample(), (0, 1)),
-            reps=(B, T) + (1,) * len(self.config.observation_space.shape),
-        )
-        if isinstance(self.config.action_space, gym.spaces.Discrete):
+        if self.framework == "tf2":
+            test_obs = np.tile(
+                np.expand_dims(self.config.observation_space.sample(), (0, 1)),
+                reps=(B, T) + (1,) * len(self.config.observation_space.shape),
+            )
             test_actions = np.tile(
                 np.expand_dims(
                     one_hot(
@@ -94,19 +79,14 @@ class DreamerV3RLModule(RLModule, abc.ABC):
                 ),
                 reps=(B, T, 1),
             )
-        else:
-            test_actions = np.tile(
-                np.expand_dims(self.config.action_space.sample(), (0, 1)),
-                reps=(B, T, 1),
+            self.dreamer_model(
+                inputs=_convert_to_tf(test_obs),
+                actions=_convert_to_tf(test_actions.astype(np.float32)),
+                is_first=_convert_to_tf(np.ones((B, T), np.float32)),
+                start_is_terminated_BxT=_convert_to_tf(np.zeros((B * T,), np.float32)),
+                horizon_H=horizon_H,
+                gamma=gamma,
             )
-
-        self.dreamer_model(
-            None,
-            _convert_to_tf(test_obs, dtype=tf.float32),
-            _convert_to_tf(test_actions, dtype=tf.float32),
-            _convert_to_tf(np.ones((B, T)), dtype=tf.bool),
-            _convert_to_tf(np.zeros((B * T,)), dtype=tf.bool),
-        )
 
         # Initialize the critic EMA net:
         self.critic.init_ema()
@@ -152,3 +132,32 @@ class DreamerV3RLModule(RLModule, abc.ABC):
             # Deterministic, continuous h-states (t1 to T).
             "h_states_BxT",
         ]
+
+    @override(RLModule)
+    def _forward_inference(self, batch: NestedDict) -> Mapping[str, Any]:
+        # Call the Dreamer-Model's forward_inference method and return a dict.
+        actions, next_state = self.dreamer_model.forward_inference(
+            observations=batch[SampleBatch.OBS],
+            previous_states=batch[STATE_IN],
+            is_first=batch["is_first"],
+        )
+        return {SampleBatch.ACTIONS: actions, STATE_OUT: next_state}
+
+    @override(RLModule)
+    def _forward_exploration(self, batch: NestedDict) -> Mapping[str, Any]:
+        # Call the Dreamer-Model's forward_exploration method and return a dict.
+        actions, next_state = self.dreamer_model.forward_exploration(
+            observations=batch[SampleBatch.OBS],
+            previous_states=batch[STATE_IN],
+            is_first=batch["is_first"],
+        )
+        return {SampleBatch.ACTIONS: actions, STATE_OUT: next_state}
+
+    @override(RLModule)
+    def _forward_train(self, batch: NestedDict):
+        # Call the Dreamer-Model's forward_train method and return its outputs as-is.
+        return self.dreamer_model.forward_train(
+            observations=batch[SampleBatch.OBS],
+            actions=batch[SampleBatch.ACTIONS],
+            is_first=batch["is_first"],
+        )

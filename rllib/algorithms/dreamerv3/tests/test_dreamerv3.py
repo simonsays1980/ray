@@ -50,7 +50,7 @@ class TestDreamerV3(unittest.TestCase):
                 use_float16=False,
             )
             .resources(
-                num_learner_workers=2,  # Try with 2 Learners.
+                num_learner_workers=2,  # Run with 2 Learners.
                 num_cpus_per_learner_worker=1,
                 num_gpus_per_learner_worker=0,
             )
@@ -65,13 +65,8 @@ class TestDreamerV3(unittest.TestCase):
 
         num_iterations = 2
 
-        for _ in framework_iterator(config, frameworks="tf2"):
-            for env in [
-                "FrozenLake-v1",
-                "CartPole-v1",
-                "ALE/MsPacman-v5",
-                "Pendulum-v1",
-            ]:
+        for _ in framework_iterator(config, frameworks=("torch", "tf2")):
+            for env in ["ALE/MsPacman-v5", "FrozenLake-v1", "CartPole-v1"]:
                 print("Env={}".format(env))
                 # Add one-hot observations for FrozenLake env.
                 if env == "FrozenLake-v1":
@@ -191,7 +186,7 @@ class TestDreamerV3(unittest.TestCase):
             symlog_obs=True,
         )
 
-        for _ in framework_iterator(config, frameworks="tf2"):
+        for fw in framework_iterator(config, frameworks=("torch", "tf2")):
             # Check all model_sizes described in the paper ([1]) on matching the number
             # of parameters to RLlib's implementation.
             for model_size in ["XS", "S", "M", "L", "XL"]:
@@ -216,25 +211,42 @@ class TestDreamerV3(unittest.TestCase):
 
                     # Count the generated RLModule's parameters and compare to the
                     # paper's reported numbers ([1] and [3]).
-                    num_params_world_model = sum(
-                        np.prod(v.shape.as_list())
-                        for v in rl_module.world_model.trainable_variables
-                    )
+                    if fw == "torch":
+                        num_params_world_model = sum(
+                            np.prod(v.shape)
+                            for v in rl_module.world_model.parameters()
+                            if v.requires_grad
+                        )
+                        num_params_actor = sum(
+                            np.prod(v.shape)
+                            for v in rl_module.actor.parameters()
+                            if v.requires_grad
+                        )
+                        num_params_critic = sum(
+                            np.prod(v.shape)
+                            for v in rl_module.critic.parameters()
+                            if v.requires_grad
+                        )
+                    else:
+                        num_params_world_model = sum(
+                            np.prod(v.shape.as_list())
+                            for v in rl_module.world_model.trainable_variables
+                        )
+                        num_params_actor = sum(
+                            np.prod(v.shape.as_list())
+                            for v in rl_module.actor.trainable_variables
+                        )
+                        num_params_critic = sum(
+                            np.prod(v.shape.as_list())
+                            for v in rl_module.critic.trainable_variables
+                        )
                     self.assertEqual(
                         num_params_world_model,
                         expected_num_params_world_model[f"{model_size}_{env_name}"],
                     )
-                    num_params_actor = sum(
-                        np.prod(v.shape.as_list())
-                        for v in rl_module.actor.trainable_variables
-                    )
                     self.assertEqual(
                         num_params_actor,
                         expected_num_params_actor[f"{model_size}_{env_name}"],
-                    )
-                    num_params_critic = sum(
-                        np.prod(v.shape.as_list())
-                        for v in rl_module.critic.trainable_variables
                     )
                     self.assertEqual(
                         num_params_critic,

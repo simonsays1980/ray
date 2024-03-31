@@ -245,7 +245,7 @@ class DreamerV3EnvRunner(EnvRunner):
         # Get initial states for all `batch_size_B` rows in the forward batch.
         initial_states = tree.map_structure(
             lambda s: np.repeat(s, self.num_envs, axis=0),
-            self.module.get_initial_state(),
+            convert_to_numpy(self.module.get_initial_state()),
         )
 
         # Have to reset the env (on all vector sub-envs).
@@ -337,8 +337,10 @@ class DreamerV3EnvRunner(EnvRunner):
                     self._states[i] = s
                     # Reset h-states to the model's initial ones b/c we are starting a
                     # new episode.
-                    for k, v in self.module.get_initial_state().items():
-                        states[k][i] = v.numpy()
+                    for k, v in convert_to_numpy(
+                        self.module.get_initial_state()
+                    ).items():
+                        states[k][i] = v
                     is_first[i] = True
                     done_episodes_to_return.append(self._episodes[i])
                     # Create a new episode object.
@@ -386,7 +388,7 @@ class DreamerV3EnvRunner(EnvRunner):
         # Multiply states n times according to our vector env batch size (num_envs).
         states = tree.map_structure(
             lambda s: np.repeat(s, self.num_envs, axis=0),
-            self.module.get_initial_state(),
+            convert_to_numpy(self.module.get_initial_state()),
         )
         is_first = np.ones((self.num_envs,))
 
@@ -451,8 +453,10 @@ class DreamerV3EnvRunner(EnvRunner):
 
                     # Reset h-states to the model's initial ones b/c we are starting a
                     # new episode.
-                    for k, v in self.module.get_initial_state().items():
-                        states[k][i] = v.numpy()
+                    for k, v in convert_to_numpy(
+                        self.module.get_initial_state()
+                    ).items():
+                        states[k][i] = v
                     is_first[i] = True
 
                     episodes[i] = SingleAgentEpisode(
