@@ -38,7 +38,7 @@ class DreamerV3Catalog(Catalog):
     def build_decoder(self, framework: str) -> Model:
         """Builds the World-Model's decoder network depending on the obs space."""
         return self._get_decoder_config().build(framework=framework)
-    
+
     def build_sequence_model(self, framework: str) -> Model:
         """Builds the World-Model's sequence model network."""
         return self._get_sequence_model_config().build(framework=framework)
@@ -262,18 +262,20 @@ class DreamerV3Catalog(Catalog):
                 "post_fcnet_bias_initializer_config"
             ],
         )
-    
+
     def _get_dynamics_predictor_config(self) -> ModelConfig:
         """Returns the dynamics predictor configuration."""
-        
+
         dynamics_predictor_model_config_dict = self._model_config_dict.get(
             "dynamics_predictor_model_config_dict"
         )
         if self.model_size:
-            dynamics_predictor_model_config_dict = self.get_dynamics_predictor_model_config_dict(
-                dynamics_predictor_model_config_dict
+            dynamics_predictor_model_config_dict = (
+                self.get_dynamics_predictor_model_config_dict(
+                    dynamics_predictor_model_config_dict
+                )
             )
-        
+
         from ray.rllib.algorithms.dreamerv3.utils.configs import DynamicsPredictorConfig
 
         return DynamicsPredictorConfig(
