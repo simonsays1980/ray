@@ -484,6 +484,8 @@ class PPO(Algorithm):
                         "action. To fix this issue, consider setting `kl_coeff` to "
                         "0.0 or increasing `entropy_coeff` in your config."
                     )
+        else:
+            kl_dict = {pid: 0.0 for pid in policies_to_update}
 
         # triggers a special update method on RLOptimizer to update the KL values.
         additional_results = self.learner_group.additional_update(
