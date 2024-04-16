@@ -49,7 +49,7 @@ pb2_scheduler = PB2(
     time_attr="timesteps_total",
     metric="episode_reward_mean",
     mode="max",
-    perturbation_interval=1000,
+    perturbation_interval=50000,
     # Copy bottom % with top % weights.
     quantile_fraction=0.25,
     hyperparam_bounds={
@@ -69,7 +69,7 @@ pb2_scheduler = PB2(
         "vf_share_layers": [False, True],
         "use_kl_loss": [False, True],
         "kl_coeff": [0.1, 0.4],
-        "vf_clip_param": [10.0, float("inf")],
+        "vf_clip_param": [10.0, 1e6],
         "grad_clip": [40, 200],
     },
 )
@@ -119,7 +119,7 @@ if __name__ == "__main__":
                 vf_share_layers=tune.choice([True, False]),
                 use_kl_loss=tune.choice([False, True]),
                 kl_coeff=tune.uniform(0.1, 0.4),
-                vf_clip_param=tune.choice([10.0, 40.0, float("inf")]),
+                vf_clip_param=tune.choice([10.0, 40.0, 1e6]),
                 grad_clip=tune.choice([None, 40, 100, 200]),
                 train_batch_size_per_learner=tune.sample_from(
                     lambda spec: 4096
