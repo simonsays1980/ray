@@ -62,7 +62,10 @@ pb2_scheduler = PB2(
         "kl_target": [0.01, 0.03],
         "mini_batch_size_per_learner": [512, 4096],
         "num_sgd_iter": [6, 32],
-        "train_batch_size_per_learner": [4096 * num_rollout_workers, 4096 * num_rollout_workers * 8],
+        "train_batch_size_per_learner": [
+            4096 * num_rollout_workers,
+            4096 * num_rollout_workers * 8,
+        ],
         "vf_share_layers": [False, True],
         "use_kl_loss": [False, True],
         "kl_coeff": [0.1, 0.4],
@@ -109,7 +112,9 @@ if __name__ == "__main__":
                 vf_loss_coeff=tune.uniform(0.01, 1.0),
                 clip_param=tune.uniform(0.1, 0.3),
                 kl_target=tune.uniform(0.01, 0.03),
-                mini_batch_size_per_learner=tune.sample_from(lambda spec: random.choice([256, 512, 1024, 2048, 4096])),
+                mini_batch_size_per_learner=tune.sample_from(
+                    lambda spec: random.choice([256, 512, 1024, 2048, 4096])
+                ),
                 num_sgd_iter=tune.sample_from(lambda spec: random.randint(6, 32)),
                 vf_share_layers=tune.choice([True, False]),
                 use_kl_loss=tune.choice([False, True]),
@@ -117,7 +122,9 @@ if __name__ == "__main__":
                 vf_clip_param=tune.choice([10.0, 40.0, float("inf")]),
                 grad_clip=tune.choice([None, 40, 100, 200]),
                 train_batch_size_per_learner=tune.sample_from(
-                    lambda spec: 4096 * num_rollout_workers * random.choice([1, 2, 4, 8])
+                    lambda spec: 4096
+                    * num_rollout_workers
+                    * random.choice([1, 2, 4, 8])
                 ),
                 model={
                     "fcnet_hiddens": [64, 64],
