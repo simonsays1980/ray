@@ -28,20 +28,20 @@ benchmark_envs = {
     "HalfCheetah-v4": {
         "timesteps_total": 1000000,
     },
-    "Hopper-v4": {
-        "timesteps_total": 1000000,
-    },
-    "InvertedPendulum-v4": {
-        "timesteps_total": 1000000,
-    },
-    "InvertedDoublePendulum-v4": {
-        "timesteps_total": 1000000,
-    },
-    "Reacher-v4": {"timesteps_total": 1000000},
-    "Swimmer-v4": {"timesteps_total": 1000000},
-    "Walker2d-v4": {
-        "timesteps_total": 1000000,
-    },
+    # "Hopper-v4": {
+    #     "timesteps_total": 1000000,
+    # },
+    # "InvertedPendulum-v4": {
+    #     "timesteps_total": 1000000,
+    # },
+    # "InvertedDoublePendulum-v4": {
+    #     "timesteps_total": 1000000,
+    # },
+    # "Reacher-v4": {"timesteps_total": 1000000},
+    # "Swimmer-v4": {"timesteps_total": 1000000},
+    # "Walker2d-v4": {
+    #     "timesteps_total": 1000000,
+    # },
 }
 
 num_rollout_workers = 1
@@ -69,7 +69,7 @@ pb2_scheduler = PB2(
         "vf_share_layers": [False, True],
         "use_kl_loss": [False, True],
         "kl_coeff": [0.1, 0.4],
-        "vf_clip_param": [10.0, float("inf")],
+        "vf_clip_param": [10.0, 1e8],
         "grad_clip": [40, 200],
     },
 )
@@ -92,7 +92,6 @@ if __name__ == "__main__":
                 rollout_fragment_length=1,
                 env_runner_cls=SingleAgentEnvRunner,
                 num_rollout_workers=num_rollout_workers,
-                # TODO (sven, simon): Add resources.
             )
             .resources(
                 # Let's start with a small number of learner workers and
@@ -102,6 +101,13 @@ if __name__ == "__main__":
                 num_learner_workers=1,
                 # TODO (simon): Change when running on large cluster.
                 num_gpus_per_learner_worker=0.25,
+            )
+            .rl_module(
+                model_config_dict={
+                    "fcnet_hiddens": [64, 64],
+                    "fcnet_activation": "tanh",
+                    "vf_share_layers": True,
+                },
             )
             # TODO (simon): Adjust to new model_config_dict.
             .training(
@@ -119,18 +125,13 @@ if __name__ == "__main__":
                 vf_share_layers=tune.choice([True, False]),
                 use_kl_loss=tune.choice([False, True]),
                 kl_coeff=tune.uniform(0.1, 0.4),
-                vf_clip_param=tune.choice([10.0, 40.0, float("inf")]),
+                vf_clip_param=tune.choice([10.0, 40.0, 1e8]),
                 grad_clip=tune.choice([None, 40, 100, 200]),
                 train_batch_size_per_learner=tune.sample_from(
                     lambda spec: 4096
                     * num_rollout_workers
                     * random.choice([1, 2, 4, 8])
                 ),
-                model={
-                    "fcnet_hiddens": [64, 64],
-                    "fcnet_activation": "tanh",
-                    "vf_share_layers": True,
-                },
             )
             .reporting(
                 metrics_num_episodes_for_smoothing=5,
