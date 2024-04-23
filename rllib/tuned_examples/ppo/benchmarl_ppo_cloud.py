@@ -20,7 +20,7 @@ parser = add_rllib_example_script_args(
     default_timesteps=5000000, default_reward=1000000.0, default_iters=100000
 )
 
-# See the following links for becnhmark results of other libraries:
+# See the following links for benchmark results of other libraries:
 #   Original paper: https://arxiv.org/abs/1812.05905
 #   CleanRL: https://wandb.ai/cleanrl/cleanrl.benchmark/reports/Mujoco--VmlldzoxODE0NjE
 #   AgileRL: https://github.com/AgileRL/AgileRL?tab=readme-ov-file#benchmarks
@@ -44,11 +44,13 @@ benchmark_envs = {
     # },
 }
 
+metric = "evaluation/sampler_results/episode_reward_mean"
+mode = "max"
 num_rollout_workers = 1
 pb2_scheduler = PB2(
     time_attr="timesteps_total",
-    metric="episode_reward_mean",
-    mode="max",
+    metric=metric,
+    mode=mode,
     perturbation_interval=1000,
     # Copy bottom % with top % weights.
     quantile_fraction=0.25,
@@ -89,7 +91,7 @@ if __name__ == "__main__":
             # Enable new API stack and use EnvRunner.
             .experimental(_enable_new_api_stack=True)
             .rollouts(
-                rollout_fragment_length=1,
+                rollout_fragment_length=tune.choice([128, 256, 512, 1024, 2048, 4096]),
                 env_runner_cls=SingleAgentEnvRunner,
                 num_rollout_workers=num_rollout_workers,
             )
@@ -109,7 +111,6 @@ if __name__ == "__main__":
                     "vf_share_layers": True,
                 },
             )
-            # TODO (simon): Adjust to new model_config_dict.
             .training(
                 lr=tune.uniform(1e-5, 1e-3),
                 gamma=tune.uniform(0.95, 0.99),
@@ -119,7 +120,10 @@ if __name__ == "__main__":
                 clip_param=tune.uniform(0.1, 0.3),
                 kl_target=tune.uniform(0.01, 0.03),
                 mini_batch_size_per_learner=tune.sample_from(
-                    lambda spec: random.choice([256, 512, 1024, 2048, 4096])
+                    lambda spec: max(
+                        spec.config["rollout_fragment_length"],
+                        random.choice([256, 512, 1024, 2048, 4096]),
+                    ),
                 ),
                 num_sgd_iter=tune.sample_from(lambda spec: random.randint(6, 32)),
                 vf_share_layers=tune.choice([True, False]),
@@ -127,11 +131,15 @@ if __name__ == "__main__":
                 kl_coeff=tune.uniform(0.1, 0.4),
                 vf_clip_param=tune.choice([10.0, 40.0, 1e8]),
                 grad_clip=tune.choice([None, 40, 100, 200]),
-                train_batch_size_per_learner=tune.sample_from(
-                    lambda spec: 4096
-                    * num_rollout_workers
+                train_batch_size=tune.sample_from(
+                    lambda spec: spec.config["mini_batch_size_per_learner"]
                     * random.choice([1, 2, 4, 8])
                 ),
+                # train_batch_size_per_learner=tune.sample_from(
+                #     lambda spec: 4096
+                #     * num_rollout_workers
+                #     * random.choice([1, 2, 4, 8])
+                # ),
             )
             .reporting(
                 metrics_num_episodes_for_smoothing=5,
@@ -149,6 +157,8 @@ if __name__ == "__main__":
             )
         )
 
+        # TODO (sven, simon): The WandB callback has to be fixed by the
+        # tune team. The current implementation leads to an OOM.
         callbacks = None
         if hasattr(args, "wandb_key") and args.wandb_key is not None:
             project = args.wandb_project or (
@@ -184,7 +194,8 @@ if __name__ == "__main__":
             ),
         )
         result_grid = tuner.fit()
-        best_result = result_grid.get_best_result()
+        # Get the best result for the current environment.
+        best_result = result_grid.get_best_result(metric=metric, mode=mode)
         print(
             f"Finished running HP search for (env={env}) in "
             f"{time.time() - hp_trial_start_time} seconds."
