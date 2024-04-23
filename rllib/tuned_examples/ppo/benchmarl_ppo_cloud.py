@@ -28,56 +28,57 @@ benchmark_envs = {
     "HalfCheetah-v4": {
         "timesteps_total": 1000000,
     },
-    # "Hopper-v4": {
-    #     "timesteps_total": 1000000,
-    # },
-    # "InvertedPendulum-v4": {
-    #     "timesteps_total": 1000000,
-    # },
-    # "InvertedDoublePendulum-v4": {
-    #     "timesteps_total": 1000000,
-    # },
-    # "Reacher-v4": {"timesteps_total": 1000000},
-    # "Swimmer-v4": {"timesteps_total": 1000000},
-    # "Walker2d-v4": {
-    #     "timesteps_total": 1000000,
-    # },
+    "Hopper-v4": {
+        "timesteps_total": 1000000,
+    },
+    "InvertedPendulum-v4": {
+        "timesteps_total": 1000000,
+    },
+    "InvertedDoublePendulum-v4": {
+        "timesteps_total": 1000000,
+    },
+    "Reacher-v4": {"timesteps_total": 1000000},
+    "Swimmer-v4": {"timesteps_total": 1000000},
+    "Walker2d-v4": {
+        "timesteps_total": 1000000,
+    },
 }
 
-metric = "evaluation/sampler_results/episode_reward_mean"
-mode = "max"
-num_rollout_workers = 1
-pb2_scheduler = PB2(
-    time_attr="timesteps_total",
-    metric=metric,
-    mode=mode,
-    perturbation_interval=1000,
-    # Copy bottom % with top % weights.
-    quantile_fraction=0.25,
-    hyperparam_bounds={
-        "lr": [1e-5, 1e-3],
-        "gamma": [0.95, 0.99],
-        "lambda": [0.97, 1.0],
-        "entropy_coeff": [0.0, 0.01],
-        "vf_loss_coeff": [0.01, 1.0],
-        "clip_param": [0.1, 0.3],
-        "kl_target": [0.01, 0.03],
-        "mini_batch_size_per_learner": [512, 4096],
-        "num_sgd_iter": [6, 32],
-        "train_batch_size_per_learner": [
-            4096 * num_rollout_workers,
-            4096 * num_rollout_workers * 8,
-        ],
-        "vf_share_layers": [False, True],
-        "use_kl_loss": [False, True],
-        "kl_coeff": [0.1, 0.4],
-        "vf_clip_param": [10.0, 1e8],
-        "grad_clip": [40, 200],
-    },
-)
 
 if __name__ == "__main__":
     args = parser.parse_args()
+
+    metric = "evaluation/sampler_results/episode_reward_mean"
+    mode = "max"
+    num_rollout_workers = 1
+    pb2_scheduler = PB2(
+        time_attr="timesteps_total",
+        metric=metric,
+        mode=mode,
+        perturbation_interval=50000,
+        # Copy bottom % with top % weights.
+        quantile_fraction=0.25,
+        hyperparam_bounds={
+            "lr": [1e-5, 1e-3],
+            "gamma": [0.95, 0.99],
+            "lambda": [0.97, 1.0],
+            "entropy_coeff": [0.0, 0.01],
+            "vf_loss_coeff": [0.01, 1.0],
+            "clip_param": [0.1, 0.3],
+            "kl_target": [0.01, 0.03],
+            "mini_batch_size_per_learner": [128, 4096],
+            "num_sgd_iter": [6, 32],
+            "train_batch_size_per_learner": [
+                128 * num_rollout_workers,
+                4096 * num_rollout_workers * 8,
+            ],
+            "vf_share_layers": [False, True],
+            "use_kl_loss": [False, True],
+            "kl_coeff": [0.1, 0.4],
+            "vf_clip_param": [10.0, 1e8],
+            "grad_clip": [40, 200],
+        },
+    )
 
     experiment_start_time = time.time()
     # Following the paper.
@@ -91,7 +92,7 @@ if __name__ == "__main__":
             # Enable new API stack and use EnvRunner.
             .experimental(_enable_new_api_stack=True)
             .rollouts(
-                rollout_fragment_length=tune.choice([128, 256, 512, 1024, 2048, 4096]),
+                rollout_fragment_length=128,
                 env_runner_cls=SingleAgentEnvRunner,
                 num_rollout_workers=num_rollout_workers,
             )
@@ -119,11 +120,8 @@ if __name__ == "__main__":
                 vf_loss_coeff=tune.uniform(0.01, 1.0),
                 clip_param=tune.uniform(0.1, 0.3),
                 kl_target=tune.uniform(0.01, 0.03),
-                mini_batch_size_per_learner=tune.sample_from(
-                    lambda spec: max(
-                        spec.config["rollout_fragment_length"],
-                        random.choice([256, 512, 1024, 2048, 4096]),
-                    ),
+                mini_batch_size_per_learner=tune.choice(
+                    [128, 256, 512, 1024, 2048, 4096]
                 ),
                 num_sgd_iter=tune.sample_from(lambda spec: random.randint(6, 32)),
                 vf_share_layers=tune.choice([True, False]),
@@ -131,15 +129,11 @@ if __name__ == "__main__":
                 kl_coeff=tune.uniform(0.1, 0.4),
                 vf_clip_param=tune.choice([10.0, 40.0, 1e8]),
                 grad_clip=tune.choice([None, 40, 100, 200]),
-                train_batch_size=tune.sample_from(
+                train_batch_size_per_learner=tune.sample_from(
                     lambda spec: spec.config["mini_batch_size_per_learner"]
+                    * num_rollout_workers
                     * random.choice([1, 2, 4, 8])
                 ),
-                # train_batch_size_per_learner=tune.sample_from(
-                #     lambda spec: 4096
-                #     * num_rollout_workers
-                #     * random.choice([1, 2, 4, 8])
-                # ),
             )
             .reporting(
                 metrics_num_episodes_for_smoothing=5,
@@ -179,7 +173,8 @@ if __name__ == "__main__":
             "PPO",
             param_space=config,
             run_config=train.RunConfig(
-                stop=stop_criteria,
+                stop={"timesteps_total": args.stop_timesteps},
+                storage_path="~/default/ray/bm_results",
                 name="benchmark_ppo_mujoco_pb2_" + env,
                 callbacks=callbacks,
                 checkpoint_config=train.CheckpointConfig(
@@ -190,7 +185,7 @@ if __name__ == "__main__":
             tune_config=tune.TuneConfig(
                 scheduler=pb2_scheduler,
                 # TODO (simon): Change when running on large cluster.
-                num_samples=4,
+                num_samples=args.num_samples,
             ),
         )
         result_grid = tuner.fit()
@@ -201,7 +196,7 @@ if __name__ == "__main__":
             f"{time.time() - hp_trial_start_time} seconds."
         )
         print(f"Best result for {env}: {best_result}")
-        print(f"Best config for {env}: {best_result['config']}")
+        print(f"Best config for {env}: {best_result.config}")
 
         # Run again with the best config.
         best_trial_start_time = time.time()
