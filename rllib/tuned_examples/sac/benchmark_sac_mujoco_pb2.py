@@ -39,85 +39,92 @@ benchmark_envs = {
     },
 }
 
-pb2_scheduler = PB2(
-    time_attr="timesteps_total",
-    metric="episode_reward_mean",
-    mode="max",
-    perturbation_interval=50000,
-    # Copy bottom % with top % weights.
-    quantile_fraction=0.25,
-    hyperparam_bounds={
-        "lr": [1e-5, 1e-3],
-        "gamma": [0.95, 0.99],
-        "n_step": [1, 3],
-        "initial_alpha": [1.0, 1.5],
-        "tau": [0.001, 0.1],
-        "target_entropy": [-10, -1],
-        "train_batch_size": [128, 512],
-        "target_network_update_freq": [1, 4],
-    },
-)
+if __name__ == "__main__":
+    args = parser.parse_args()
 
-experiment_start_time = time.time()
-for env, stop_criteria in benchmark_envs.items():
-    hp_trial_start_time = time.time()
-    config = (
-        SACConfig()
-        .environment(env=env)
-        # Enable new API stack and use EnvRunner.
-        .experimental(_enable_new_api_stack=True)
-        .rollouts(
-            rollout_fragment_length="auto",
-            env_runner_cls=SingleAgentEnvRunner,
-            num_rollout_workers=1,
-            # TODO (sven, simon): Add resources.
-        )
-        .resources(
-            # Note, we have a small batch and a sample/train ratio
-            # of 1:1, so a single GPU should be enough.
-            num_learner_workers=1,
-            num_gpus_per_learner_worker=1,
-        )
-        .rl_module(
-            model_config_dict={
-                "fcnet_hiddens": [256, 256],
-                "fcnet_activation": "relu",
-                "post_fcnet_hiddens": [],
-                "post_fcnet_activation": None,
-                "post_fcnet_weights_initializer": "orthogonal_",
-                "post_fcnet_weights_initializer_config": {"gain": 0.01},
-            },
-        )
-        .training(
-            initial_alpha=tune.choice([1.0, 1.5]),
-            lr=tune.uniform(1e-5, 1e-3),
-            target_entropy=tune.choice([-10, -5, -1, "auto"]),
-            n_step=tune.choice([1, 3, (1, 3)]),
-            tau=tune.uniform(0.001, 0.1),
-            train_batch_size=tune.choice([128, 256, 512]),
-            target_network_update_freq=tune.choice([1, 2, 4]),
-            replay_buffer_config={
-                "type": "PrioritizedEpisodeReplayBuffer",
-                "capacity": 1000000,
-                "alpha": 0.6,
-                "beta": 0.4,
-            },
-            num_steps_sampled_before_learning_starts=256,
-        )
-        .reporting(
-            metrics_num_episodes_for_smoothing=5,
-            min_sample_timesteps_per_iteration=1000,
-        )
-        .evaluation(
-            evaluation_duration="auto",
-            evaluation_interval=1,
-            evaluation_num_workers=1,
-            evaluation_parallel_to_training=True,
-            evaluation_config={
-                "explore": False,
-            },
-        )
+    metric = "evaluation/sampler_results/episode_reward_mean"
+    mode = "max"
+    num_rollout_workers = args.num_env_runners
+    num_envs_per_worker = 2
+    pb2_scheduler = PB2(
+        time_attr="timesteps_total",
+        metric=metric,
+        mode=mode,
+        perturbation_interval=50000,
+        # Copy bottom % with top % weights.
+        quantile_fraction=0.25,
+        hyperparam_bounds={
+            "lr": [1e-5, 1e-3],
+            "gamma": [0.95, 0.99],
+            "n_step": [1, 3],
+            "initial_alpha": [1.0, 1.5],
+            "tau": [0.001, 0.1],
+            "target_entropy": [-10, -1],
+            "train_batch_size": [128, 512],
+            "target_network_update_freq": [1, 4],
+        },
     )
+
+    experiment_start_time = time.time()
+    for env, stop_criteria in benchmark_envs.items():
+        hp_trial_start_time = time.time()
+        config = (
+            SACConfig()
+            .environment(env=env)
+            # Enable new API stack and use EnvRunner.
+            .experimental(_enable_new_api_stack=True)
+            .rollouts(
+                rollout_fragment_length="auto",
+                env_runner_cls=SingleAgentEnvRunner,
+                num_rollout_workers=1,
+                # TODO (sven, simon): Add resources.
+            )
+            .resources(
+                # Note, we have a small batch and a sample/train ratio
+                # of 1:1, so a single GPU should be enough.
+                num_learner_workers=1,
+                num_gpus_per_learner_worker=1,
+            )
+            .rl_module(
+                model_config_dict={
+                    "fcnet_hiddens": [256, 256],
+                    "fcnet_activation": "relu",
+                    "post_fcnet_hiddens": [],
+                    "post_fcnet_activation": None,
+                    "post_fcnet_weights_initializer": "orthogonal_",
+                    "post_fcnet_weights_initializer_config": {"gain": 0.01},
+                },
+            )
+            .training(
+                initial_alpha=tune.choice([1.0, 1.5]),
+                lr=tune.uniform(1e-5, 1e-3),
+                target_entropy=tune.choice([-10, -5, -1, "auto"]),
+                n_step=tune.choice([1, 3, (1, 3)]),
+                tau=tune.uniform(0.001, 0.1),
+                train_batch_size=tune.choice([128, 256, 512]),
+                target_network_update_freq=tune.choice([1, 2, 4]),
+                replay_buffer_config={
+                    "type": "PrioritizedEpisodeReplayBuffer",
+                    "capacity": 1000000,
+                    "alpha": 0.6,
+                    "beta": 0.4,
+                },
+                num_steps_sampled_before_learning_starts=256,
+            )
+            .reporting(
+                metrics_num_episodes_for_smoothing=5,
+                min_sample_timesteps_per_iteration=1000,
+            )
+            .evaluation(
+                evaluation_duration="auto",
+                evaluation_interval=1,
+                evaluation_num_workers=1,
+                evaluation_parallel_to_training=True,
+                evaluation_config={
+                    "explore": False,
+                },
+            )
+        )
 
     tuner = tune.Tuner(
         "SAC",

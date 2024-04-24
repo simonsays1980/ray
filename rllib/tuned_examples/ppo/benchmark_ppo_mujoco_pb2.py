@@ -3,6 +3,7 @@ import re
 import time
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms.ppo.ppo import PPOConfig
+from ray.rllib.connectors.env_to_module.mean_std_filter import MeanStdFilter
 from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
 from ray.rllib.utils.test_utils import add_rllib_example_script_args
 from ray.tune.schedulers.pb2 import PB2
@@ -95,6 +96,7 @@ if __name__ == "__main__":
                 env_runner_cls=SingleAgentEnvRunner,
                 num_rollout_workers=num_rollout_workers,
                 num_envs_per_worker=num_envs_per_worker,
+                env_to_module_connector=lambda env: MeanStdFilter(),
             )
             .resources(
                 # Let's start with a small number of learner workers and
