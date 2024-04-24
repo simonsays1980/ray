@@ -130,7 +130,8 @@ if __name__ == "__main__":
                 grad_clip=tune.choice([None, 40, 100, 200]),
                 train_batch_size_per_learner=tune.sample_from(
                     lambda spec: spec.config["mini_batch_size_per_learner"]
-                    * num_rollout_workers * num_envs_per_worker
+                    * num_rollout_workers
+                    * num_envs_per_worker
                     * random.choice([1, 2, 4, 8])
                 ),
             )
@@ -186,9 +187,11 @@ if __name__ == "__main__":
                 num_samples=args.num_samples,
             ),
         )
+        print(f"=========== Starting HP search for (env={env}) ===========")
         result_grid = tuner.fit()
         # Get the best result for the current environment.
         best_result = result_grid.get_best_result(metric=metric, mode=mode)
+        print("-----------------------------------------------------------")
         print(
             f"Finished running HP search for (env={env}) in "
             f"{time.time() - hp_trial_start_time} seconds."
@@ -206,12 +209,14 @@ if __name__ == "__main__":
                 name="benchmark_ppo_mujoco_pb2_" + env + "_best",
             ),
         )
+        print(f"=========== Best config run for (env={env}) ===========")
         print(f"Running best config for (env={env})...")
         tuner.fit()
         print(
             f"Finished running best config for (env={env}) "
             f"in {time.time() - best_trial_start_time} seconds."
         )
+        print("--------------------------------------------------------")
 
     print(
         f"Finished running HP search on all MuJoCo benchmarks in "
