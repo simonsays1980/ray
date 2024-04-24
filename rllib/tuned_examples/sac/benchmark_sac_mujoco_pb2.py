@@ -1,6 +1,9 @@
 import time
+import re
+from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms.sac.sac import SACConfig
 from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
+from ray.rllib.utils.test_utils import add_rllib_example_script_args
 from ray.tune.schedulers.pb2 import PB2
 from ray import train, tune
 
@@ -11,6 +14,10 @@ from ray import train, tune
 # Might need to be added to bashsrc:
 #   export MUJOCO_GL=osmesa"
 #   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/.mujoco/mujoco200/bin"
+
+parser = add_rllib_example_script_args(
+    default_timesteps=5000000, default_reward=1000000.0, default_iters=100000
+)
 
 # See the following links for becnhmark results of other libraries:
 #   Original paper: https://arxiv.org/abs/1812.05905
@@ -71,7 +78,16 @@ for env, stop_criteria in benchmark_envs.items():
             num_learner_workers=1,
             num_gpus_per_learner_worker=1,
         )
-        # TODO (simon): Adjust to new model_config_dict.
+        .rl_module(
+            model_config_dict={
+                "fcnet_hiddens": [256, 256],
+                "fcnet_activation": "relu",
+                "post_fcnet_hiddens": [],
+                "post_fcnet_activation": None,
+                "post_fcnet_weights_initializer": "orthogonal_",
+                "post_fcnet_weights_initializer_config": {"gain": 0.01},
+            },
+        )
         .training(
             initial_alpha=tune.choice([1.0, 1.5]),
             lr=tune.uniform(1e-5, 1e-3),
@@ -87,14 +103,6 @@ for env, stop_criteria in benchmark_envs.items():
                 "beta": 0.4,
             },
             num_steps_sampled_before_learning_starts=256,
-            model={
-                "fcnet_hiddens": [256, 256],
-                "fcnet_activation": "relu",
-                "post_fcnet_hiddens": [],
-                "post_fcnet_activation": None,
-                "post_fcnet_weights_initializer": "orthogonal_",
-                "post_fcnet_weights_initializer_config": {"gain": 0.01},
-            },
         )
         .reporting(
             metrics_num_episodes_for_smoothing=5,
