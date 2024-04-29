@@ -1,5 +1,4 @@
 from ray.rllib.algorithms.ppo.ppo import PPOConfig
-from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
 from ray.tune import Stopper
 from ray import train, tune
 
@@ -18,32 +17,32 @@ from ray import train, tune
 #   AgileRL: https://github.com/AgileRL/AgileRL?tab=readme-ov-file#benchmarks
 benchmark_envs = {
     "HalfCheetah-v4": {
-        "sampler_results/episode_reward_mean": 2000,
-        "timesteps_total": 1000000,
+        "evaluation_results/env_runner_results/episode_return_mean": 2000,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
     "Hopper-v4": {
-        "sampler_results/episode_reward_mean": 2250,
-        "timesteps_total": 1000000,
+        "evaluation_results/env_runner_results/episode_return_mean": 2250,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
     "InvertedPendulum-v4": {
-        "sampler_results/episode_reward_mean": 1000,
-        "timesteps_total": 1000000,
+        "evaluation_results/env_runner_results/episode_return_mean": 1000,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
     "InvertedDoublePendulum-v4": {
-        "sampler_results/episode_reward_mean": 8000,
-        "timesteps_total": 1000000,
+        "evaluation_results/env_runner_results/episode_return_mean": 8000,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
     "Reacher-v4": {
-        "sampler_results/episode_reward_mean": -15,
-        "timesteps_total": 1000000,
+        "evaluation_results/env_runner_results/episode_return_mean": -15,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
     "Swimmer-v4": {
-        "sampler_results/episode_reward_mean": 120,
-        "timesteps_total": 1000000,
+        "evaluation_results/env_runner_results/episode_return_mean": 120,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
     "Walker2d-v4": {
-        "sampler_results/episode_reward_mean": 3500,
-        "timesteps_total": 1000000,
+        "evaluation_results/env_runner_results/episode_return_mean": 3500,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
 }
 
@@ -57,14 +56,16 @@ class BenchmarkStopper(Stopper):
     def __call__(self, trial_id, result):
         # Stop training if the mean reward is reached.
         if (
-            result["sampler_results"]["episode_reward_mean"]
-            >= self.benchmark_envs[result["env"]]["sampler_results/episode_reward_mean"]
+            result["sampler_results"]["num_env_steps_sampled_lifetime"]
+            >= self.benchmark_envs[result["env"]][
+                "evaluation_results/env_runner_results/episode_return_mean"
+            ]
         ):
             return True
         # Otherwise check, if the total number of timesteps is exceeded.
         elif (
-            result["timesteps_total"]
-            >= self.benchmark_envs[result["env"]]["timesteps_total"]
+            result["num_env_steps_sampled_lifetime"]
+            >= self.benchmark_envs[result["env"]]["num_env_steps_sampled_lifetime"]
         ):
             return True
         # Otherwise continue training.
@@ -80,11 +81,13 @@ config = (
     PPOConfig()
     .environment(env=tune.grid_search(list(benchmark_envs.keys())))
     # Enable new API stack and use EnvRunner.
-    .experimental(_enable_new_api_stack=True)
-    .rollouts(
-        env_runner_cls=SingleAgentEnvRunner,
+    .api_stack(
+        enable_rl_module_and_learner=True,
+        enable_env_runner_and_connector_v2=True,
+    )
+    .env_runners(
         # Following the paper.
-        num_rollout_workers=32,
+        num_env_runners=32,
         rollout_fragment_length=512,
     )
     .resources(
@@ -116,7 +119,7 @@ config = (
     .evaluation(
         evaluation_duration="auto",
         evaluation_interval=1,
-        evaluation_num_workers=1,
+        evaluation_num_env_runners=1,
         evaluation_parallel_to_training=True,
         evaluation_config={
             "explore": True,

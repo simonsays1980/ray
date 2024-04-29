@@ -27,21 +27,21 @@ parser = add_rllib_example_script_args(
 #   AgileRL: https://github.com/AgileRL/AgileRL?tab=readme-ov-file#benchmarks
 benchmark_envs = {
     "HalfCheetah-v4": {
-        "timesteps_total": 1000000,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
     "Hopper-v4": {
-        "timesteps_total": 1000000,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
     "InvertedPendulum-v4": {
-        "timesteps_total": 1000000,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
     "InvertedDoublePendulum-v4": {
-        "timesteps_total": 1000000,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
-    "Reacher-v4": {"timesteps_total": 1000000},
-    "Swimmer-v4": {"timesteps_total": 1000000},
+    "Reacher-v4": {"num_env_steps_sampled_lifetime": 1000000},
+    "Swimmer-v4": {"num_env_steps_sampled_lifetime": 1000000},
     "Walker2d-v4": {
-        "timesteps_total": 1000000,
+        "num_env_steps_sampled_lifetime": 1000000,
     },
 }
 
@@ -49,12 +49,12 @@ benchmark_envs = {
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    metric = "evaluation/sampler_results/episode_reward_mean"
+    metric = "evaluation_results/env_runner_results/episode_return_mean"
     mode = "max"
     num_rollout_workers = args.num_env_runners
     num_envs_per_worker = 2
     pb2_scheduler = PB2(
-        time_attr="timesteps_total",
+        time_attr="num_env_steps_sampled_lifetime",
         metric=metric,
         mode=mode,
         perturbation_interval=50000,
@@ -175,7 +175,7 @@ if __name__ == "__main__":
             "PPO",
             param_space=config,
             run_config=train.RunConfig(
-                stop={"timesteps_total": args.stop_timesteps},
+                stop={"num_env_steps_sampled_lifetime": args.stop_timesteps},
                 storage_path="~/default/ray/bm_results",
                 name="benchmark_ppo_mujoco_pb2_" + env,
                 callbacks=callbacks,
