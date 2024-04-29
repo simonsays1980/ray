@@ -4,7 +4,6 @@ import time
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms.ppo.ppo import PPOConfig
 from ray.rllib.connectors.env_to_module.mean_std_filter import MeanStdFilter
-from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
 from ray.rllib.utils.test_utils import add_rllib_example_script_args
 from ray.tune.schedulers.pb2 import PB2
 from ray import train, tune
@@ -51,8 +50,8 @@ if __name__ == "__main__":
 
     metric = "evaluation_results/env_runner_results/episode_return_mean"
     mode = "max"
-    num_rollout_workers = args.num_env_runners
-    num_envs_per_worker = 2
+    num_env_runners = args.num_env_runners
+    num_envs_per_env_runner = 2
     pb2_scheduler = PB2(
         time_attr="num_env_steps_sampled_lifetime",
         metric=metric,
@@ -71,8 +70,8 @@ if __name__ == "__main__":
             "mini_batch_size_per_learner": [128, 4096],
             "num_sgd_iter": [6, 32],
             "train_batch_size_per_learner": [
-                128 * num_rollout_workers * num_envs_per_worker,
-                4096 * num_rollout_workers * num_envs_per_worker * 8,
+                128 * num_env_runners * num_envs_per_env_runner,
+                4096 * num_env_runners * num_envs_per_env_runner * 8,
             ],
             "vf_share_layers": [False, True],
             "use_kl_loss": [False, True],
@@ -90,12 +89,14 @@ if __name__ == "__main__":
             PPOConfig()
             .environment(env=env)
             # Enable new API stack and use EnvRunner.
-            .experimental(_enable_new_api_stack=True)
+            .api_stack(
+                enable_env_runner_and_connector_v2=True,
+                enable_rl_module_and_learner=True
+            )
             .rollouts(
-                rollout_fragment_length=128,
-                env_runner_cls=SingleAgentEnvRunner,
-                num_rollout_workers=num_rollout_workers,
-                num_envs_per_worker=num_envs_per_worker,
+                rollout_fragment_length="auto",
+                num_env_runners=num_env_runners,
+                num_envs_per_env_runner=num_envs_per_env_runner,
                 env_to_module_connector=lambda env: MeanStdFilter(),
             )
             .resources(
@@ -132,8 +133,8 @@ if __name__ == "__main__":
                 grad_clip=tune.choice([None, 40, 100, 200]),
                 train_batch_size_per_learner=tune.sample_from(
                     lambda spec: spec.config["mini_batch_size_per_learner"]
-                    * num_rollout_workers
-                    * num_envs_per_worker
+                    * num_env_runners
+                    * num_envs_per_env_runner
                     * random.choice([1, 2, 4, 8])
                 ),
             )
@@ -143,8 +144,9 @@ if __name__ == "__main__":
             )
             .evaluation(
                 evaluation_duration="auto",
+                evaluation_duration_unit="timesteps",
                 evaluation_interval=1,
-                evaluation_num_workers=1,
+                evaluation_num_env_runners=1,
                 evaluation_parallel_to_training=True,
                 evaluation_config={
                     # PPO learns stochastic policy.
