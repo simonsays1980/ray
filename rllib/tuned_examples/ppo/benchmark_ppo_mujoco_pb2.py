@@ -91,7 +91,7 @@ if __name__ == "__main__":
             # Enable new API stack and use EnvRunner.
             .api_stack(
                 enable_env_runner_and_connector_v2=True,
-                enable_rl_module_and_learner=True
+                enable_rl_module_and_learner=True,
             )
             .rollouts(
                 rollout_fragment_length="auto",
