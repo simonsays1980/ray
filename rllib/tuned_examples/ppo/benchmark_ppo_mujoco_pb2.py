@@ -70,8 +70,7 @@ if __name__ == "__main__":
             "mini_batch_size_per_learner": [128, 4096],
             "num_sgd_iter": [6, 32],
             "train_batch_size_per_learner": [
-                128 * num_env_runners * num_envs_per_env_runner,
-                4096 * num_env_runners * num_envs_per_env_runner * 8,
+                4096, 4096 * 4,
             ],
             "vf_share_layers": [False, True],
             "use_kl_loss": [False, True],
@@ -93,7 +92,7 @@ if __name__ == "__main__":
                 enable_env_runner_and_connector_v2=True,
                 enable_rl_module_and_learner=True,
             )
-            .rollouts(
+            .env_runners(
                 rollout_fragment_length="auto",
                 num_env_runners=num_env_runners,
                 num_envs_per_env_runner=num_envs_per_env_runner,
@@ -132,10 +131,7 @@ if __name__ == "__main__":
                 vf_clip_param=tune.choice([10.0, 40.0, 1e8]),
                 grad_clip=tune.choice([None, 40, 100, 200]),
                 train_batch_size_per_learner=tune.sample_from(
-                    lambda spec: spec.config["mini_batch_size_per_learner"]
-                    * num_env_runners
-                    * num_envs_per_env_runner
-                    * random.choice([1, 2, 4, 8])
+                    lambda spec: 4096 * random.choice([1, 2, 4])
                 ),
             )
             .reporting(
