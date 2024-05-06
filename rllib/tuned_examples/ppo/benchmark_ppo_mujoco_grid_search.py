@@ -1,11 +1,9 @@
-import random
 import re
 import time
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.algorithms.ppo.ppo import PPOConfig
 from ray.rllib.connectors.env_to_module.mean_std_filter import MeanStdFilter
 from ray.rllib.utils.test_utils import add_rllib_example_script_args
-from ray.tune.schedulers.pb2 import PB2
 from ray import train, tune
 
 # Needs the following packages to be installed on Ubuntu:
@@ -52,34 +50,6 @@ if __name__ == "__main__":
     mode = "max"
     num_env_runners = args.num_env_runners
     num_envs_per_env_runner = 2
-    pb2_scheduler = PB2(
-        time_attr="num_env_steps_sampled_lifetime",
-        metric=metric,
-        mode=mode,
-        perturbation_interval=50000,
-        # Copy bottom % with top % weights.
-        quantile_fraction=0.25,
-        hyperparam_bounds={
-            "lr": [1e-5, 1e-3],
-            "gamma": [0.95, 0.99],
-            "lambda": [0.97, 1.0],
-            "entropy_coeff": [0.0, 0.01],
-            "vf_loss_coeff": [0.01, 1.0],
-            "clip_param": [0.1, 0.3],
-            "kl_target": [0.01, 0.03],
-            "mini_batch_size_per_learner": [128, 4096],
-            "num_sgd_iter": [6, 32],
-            "train_batch_size_per_learner": [
-                4096,
-                4096 * 4,
-            ],
-            "vf_share_layers": [False, True],
-            "use_kl_loss": [False, True],
-            "kl_coeff": [0.1, 0.4],
-            "vf_clip_param": [10.0, 1e8],
-            "grad_clip": [40, 200],
-        },
-    )
 
     experiment_start_time = time.time()
     # Following the paper.
@@ -115,25 +85,21 @@ if __name__ == "__main__":
                 },
             )
             .training(
-                lr=tune.uniform(1e-5, 1e-3),
-                gamma=tune.uniform(0.95, 0.99),
-                lambda_=tune.uniform(0.97, 1.0),
-                entropy_coeff=tune.choice([0.0, 0.01]),
-                vf_loss_coeff=tune.uniform(0.01, 1.0),
-                clip_param=tune.uniform(0.1, 0.3),
-                kl_target=tune.uniform(0.01, 0.03),
-                mini_batch_size_per_learner=tune.choice(
-                    [128, 256, 512, 1024, 2048, 4096]
-                ),
-                num_sgd_iter=tune.sample_from(lambda spec: random.randint(6, 32)),
-                vf_share_layers=tune.choice([True, False]),
+                lr=tune.grid_search([1e-5, 1e-3]),
+                gamma=0.99,
+                lambda_=0.95,
+                entropy_coeff=tune.grid_search([0.0, 0.01]),
+                vf_loss_coeff=tune.grid_search([0.1, 1.0]),
+                clip_param=0.3,
+                kl_target=0.02,
+                mini_batch_size_per_learner=128,
+                num_sgd_iter=32,
+                vf_share_layers=True,
                 use_kl_loss=tune.choice([False, True]),
-                kl_coeff=tune.uniform(0.1, 0.4),
-                vf_clip_param=tune.choice([10.0, 40.0, 1e8]),
-                grad_clip=tune.choice([None, 40, 100, 200]),
-                train_batch_size_per_learner=tune.sample_from(
-                    lambda spec: 4096 * random.choice([1, 2, 4])
-                ),
+                kl_coeff=0.2,
+                vf_clip_param=float("inf"),
+                grad_clip=float("inf"),
+                train_batch_size_per_learner=4096,
             )
             .reporting(
                 metrics_num_episodes_for_smoothing=5,
@@ -157,7 +123,7 @@ if __name__ == "__main__":
         callbacks = None
         if hasattr(args, "wandb_key") and args.wandb_key is not None:
             project = args.wandb_project or (
-                "ppo-benchmarks-mujoco-pb2"
+                "ppo-benchmarks-mujoco-grid-search"
                 + "-"
                 + re.sub("\\W+", "-", str(config.env).lower())
             )
@@ -176,7 +142,7 @@ if __name__ == "__main__":
             run_config=train.RunConfig(
                 stop={"num_env_steps_sampled_lifetime": args.stop_timesteps},
                 storage_path="~/default/ray/bm_results",
-                name="benchmark_ppo_mujoco_pb2_" + env,
+                name="benchmark_ppo_mujoco_grid_search_" + env,
                 callbacks=callbacks,
                 checkpoint_config=train.CheckpointConfig(
                     checkpoint_frequency=args.checkpoint_freq,
@@ -184,7 +150,6 @@ if __name__ == "__main__":
                 ),
             ),
             tune_config=tune.TuneConfig(
-                scheduler=pb2_scheduler,
                 num_samples=args.num_samples,
             ),
         )
@@ -207,7 +172,7 @@ if __name__ == "__main__":
             param_space=best_result.config,
             run_config=train.RunConfig(
                 stop=stop_criteria,
-                name="benchmark_ppo_mujoco_pb2_" + env + "_best",
+                name="benchmark_ppo_mujoco_grid_search_" + env + "_best",
             ),
         )
         print(f"=========== Best config run for (env={env}) ===========")
@@ -225,5 +190,5 @@ if __name__ == "__main__":
     )
     print(
         "Results from running the best configs can be found in the "
-        "`benchmark_ppo_mujoco_pb2_<ENV-NAME>_best` directories."
+        "`benchmark_ppo_mujoco_grid_search_<ENV-NAME>_best` directories."
     )
