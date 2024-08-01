@@ -158,9 +158,19 @@ class OfflineSingleAgentEnvRunner(SingleAgentEnvRunner):
                     samples_env_steps = np.cumsum(
                         [eps.env_steps() for eps in self._samples]
                     )
+                    # Concatenate the last cumulated sum + 1 to cover the case that
+                    # the last cumulated sum equals output_max_rows_Per>_file.
+                    samples_env_steps = np.concatenate(
+                        [samples_env_steps, np.array([samples_env_steps[-1] + 1])]
+                    )
+                    samples_cut_idx = np.flatnonzero(
+                        samples_env_steps > self.output_max_rows_per_file
+                    )
                     samples_cut_idx = (
-                        samples_env_steps >= self.output_max_rows_per_file
-                    ).nonzero()[0][0] or len(self._samples)
+                        samples_cut_idx[0]
+                        if samples_cut_idx.any()
+                        else len(self._samples)
+                    )
                     samples_to_write = self._samples[:samples_cut_idx]
                     self._samples = self._samples[samples_cut_idx:]
                 # Otherwise, we write all buffered samples to disk.
