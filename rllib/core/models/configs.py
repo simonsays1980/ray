@@ -1093,3 +1093,20 @@ class ActorCriticEncoderConfig(ModelConfig):
                 return TfStatefulActorCriticEncoder(self)
             else:
                 return TfActorCriticEncoder(self)
+
+class LLMConfig(ModelConfig):
+    import types
+    llm_module: types.ModuleType = None
+    chkpt_dir: str = None
+    tokenizer_path: str = None
+    max_seq_len: int = 8192
+    max_batch_size: int = 1024
+
+    def build(self, framework: str = "torch") -> "Model":
+
+        return llm_module.build(
+            chkpt_dir=self.chkpt_dir,
+            tokenizer_path=self.tokenizer_path,
+            max_seq_len=self.max_seq_len,
+            max_batch_size=self.max_batch_size,
+        )
