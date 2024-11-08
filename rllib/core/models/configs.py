@@ -1094,19 +1094,22 @@ class ActorCriticEncoderConfig(ModelConfig):
             else:
                 return TfActorCriticEncoder(self)
 
+
 class LLMConfig(ModelConfig):
-    import types
-    llm_module: types.ModuleType = None
-    chkpt_dir: str = None
-    tokenizer_path: str = None
-    max_seq_len: int = 8192
-    max_batch_size: int = 1024
+
+    from ray.rllib.utils.framework import try_import_torch
+
+    torch, _ = try_import_torch()
+    
+    model_id: str = None
+    torch_dtype: torch.FloatType = torch.bfloat16
 
     def build(self, framework: str = "torch") -> "Model":
-
-        return llm_module.build(
-            chkpt_dir=self.chkpt_dir,
-            tokenizer_path=self.tokenizer_path,
-            max_seq_len=self.max_seq_len,
-            max_batch_size=self.max_batch_size,
+        from transformers import pipeline
+        
+        return pipeline(
+            "text-generation",
+            model=self.model_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
         )
