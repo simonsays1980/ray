@@ -1100,13 +1100,13 @@ class LLMConfig(ModelConfig):
     from ray.rllib.utils.framework import try_import_torch
 
     torch, _ = try_import_torch()
-    
+
     model_id: str = None
     torch_dtype: torch.FloatType = torch.bfloat16
 
     def build(self, framework: str = "torch") -> "Model":
         from transformers import pipeline
-        
+
         return pipeline(
             "text-generation",
             model=self.model_id,
