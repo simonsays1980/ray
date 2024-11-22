@@ -1,4 +1,3 @@
-
 ## Nemotron
 # SFT: nvidia/nemotron-3-8b-chat-4k-sft
 
@@ -22,6 +21,7 @@ import ray
 from ray.data import DataContext
 from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.torch_utils import convert_to_torch_tensor
+
 ctx = ray.data.DataContext.get_current()
 ctx.log_internal_stack_trace_to_stdout = True
 
@@ -36,11 +36,15 @@ SIMPLE_CHAT_TEMPLATE = "{% for message in messages %}{{message['role'].capitaliz
 # This is used in the PPO TL;DR example.
 dataset_name = "trl-internal-testing/tldr-preference-sft-trl-style"
 
-splits = {'train': 'data/train-*.parquet', 'validation': 'data/validation-00000-of-00001.parquet', 'test': 'data/test-00000-of-00001.parquet'}
+splits = {
+    "train": "data/train-*.parquet",
+    "validation": "data/validation-00000-of-00001.parquet",
+    "test": "data/test-00000-of-00001.parquet",
+}
 hf_dataset_stream = load_dataset(dataset_name, streaming=True)
 ds_train = ray.data.from_huggingface(hf_dataset_stream["train"])
 
-#ds_train = ray.data.from_pandas(df_train).map(prepare_prompts).drop_columns(["id", "subreddit", "title", "post", "summary"])
+# ds_train = ray.data.from_pandas(df_train).map(prepare_prompts).drop_columns(["id", "subreddit", "title", "post", "summary"])
 
 # row = ds_train.take(1)
 # print(row)
@@ -58,6 +62,7 @@ tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 if tokenizer.chat_template is None:
     tokenizer.chat_template = SIMPLE_CHAT_TEMPLATE
 
+
 def tokenize(element):
     # print(f"===> messages: {element['messages']}")
     input_ids = tokenizer.apply_chat_template(
@@ -66,6 +71,7 @@ def tokenize(element):
         add_generation_prompt=True,
     )
     return {"input_ids": input_ids, "lengths": len(input_ids)}
+
 
 ds_train_mapped = ds_train.map(tokenize).filter(lambda x: x["lengths"] <= 512)
 
@@ -81,7 +87,7 @@ generation_config = GenerationConfig(
     top_p=1.0,
     do_sample=True,
 )
-generation_config.eos_token_id = None,
+generation_config.eos_token_id = (None,)
 generation_config.pad_token_id = None
 train_batch = ds_train_mapped.take_batch(4)
 
@@ -98,4 +104,4 @@ output = policy.generate(
     output_scores=True,
 )
 print(output)
-#policy.foward()
+# policy.foward()
