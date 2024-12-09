@@ -15,18 +15,18 @@
 
 # SFT Dataset TL;DR
 # https://huggingface.co/datasets/vwxyzjn/summarize_from_feedback_tldr_3_filtered
-import pandas as pd
+#import pandas as pd
 import ray
 
-from ray.data import DataContext
 from ray.rllib.utils.framework import try_import_torch
-from ray.rllib.utils.torch_utils import convert_to_torch_tensor
+#from ray.rllib.utils.torch_utils import convert_to_torch_tensor
 
-ctx = ray.data.DataContext.get_current()
-ctx.log_internal_stack_trace_to_stdout = True
+# ctx = ray.data.DataContext.get_current()
+# ctx.log_internal_stack_trace_to_stdout = True
 
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig
+from transformers import AutoTokenizer, AutoModelForCausalLM, DataCollatorWithPadding, GenerationConfig
+from ray.rllib.utils.framework import try_import_torch
 
 torch, nn = try_import_torch()
 
@@ -89,10 +89,18 @@ generation_config = GenerationConfig(
 )
 generation_config.eos_token_id = (None,)
 generation_config.pad_token_id = None
-train_batch = ds_train_mapped.take_batch(4)
-
-input_ids = torch.Tensor(train_batch["input_ids"].tolist())
-
+train_batch = ds_train_mapped.take(4)
+print(train_batch)
+#input_ids = data_collator.return_tensors(train_batch["input_ids"])
+# input_ids = torch.Tensor(train_batch["input_ids"].tolist())
+tokenized_inputs = tokenizer.pad(
+    train_batch, 
+    max_length=None, 
+    padding=True, 
+    pad_to_multiple_of=None, 
+    return_tensors="pt"
+)
+input_ids = train_batch["input_ids"]
 print(f"Type of input_ids: {type(input_ids)}")
 attention_mask = input_ids != tokenizer.pad_token_id
 input_ids = torch.masked_fill(input_ids, ~attention_mask, 0)
