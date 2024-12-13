@@ -4,20 +4,21 @@ from datasets import load_dataset
 import ray
 from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
 from ray.rllib.offline.offline_data import OfflineData
-from ray.rllib.tuned_examples.rlhf.tldr_rlhf_offline_prelearner import TLDRRLHFOfflinePreLearner
+from ray.rllib.tuned_examples.rlhf.tldr_rlhf_offline_prelearner import (
+    TLDRRLHFOfflinePreLearner,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class TLDRRLHFOfflineData(OfflineData):
-
     def __init__(self, config: AlgorithmConfig):
-        
+
         self.config: AlgorithmConfig = config
         self.is_multi_agent: bool = False
         self.path: str = self.config.input_
 
-        # SFT model ID to load a corresponding tokenizer. 
+        # SFT model ID to load a corresponding tokenizer.
         self.sft_model_id = self.config.sft_model_id
 
         # Load the dataset.
@@ -42,33 +43,29 @@ class TLDRRLHFOfflineData(OfflineData):
         )
         # Defines the prelearner class. Note, this could be user-defined.
         # TODO (simon): Add the TLDR prelearner here.
-        self.prelearner_class = self.config.prelearner_class or TLDRRLHFOfflinePreLearner
-        
+        self.prelearner_class = (
+            self.config.prelearner_class or TLDRRLHFOfflinePreLearner
+        )
 
     def sample(
         self,
-        num_samples: int, 
+        num_samples: int,
         return_iterator: bool = False,
         num_shards: int = 1,
     ):
         if num_shards > 1:
-            raise ValueError(
-                "`RLHFDataOffline` class allows no multi-learner setups."
-            )
+            raise ValueError("`RLHFDataOffline` class allows no multi-learner setups.")
 
         # If the data is not mapped, yet, map it here and apply the filter.
         if not self.data_mapped:
-            self.data = (
-                self.data
-                .map_batches(
-                    self.prelearner_class,
-                    fn_constructor_kwargs={
-                        "config": self.config,
-                        "sft_model_id": self.sft_model_id,
-                    },
-                    batch_size=num_samples,
-                    **self.map_batches_kwargs,
-                )
+            self.data = self.data.map_batches(
+                self.prelearner_class,
+                fn_constructor_kwargs={
+                    "config": self.config,
+                    "sft_model_id": self.sft_model_id,
+                },
+                batch_size=num_samples,
+                **self.map_batches_kwargs,
             )
 
         # Build an data iterator, if necessary.
@@ -86,7 +83,7 @@ class TLDRRLHFOfflineData(OfflineData):
         except StopIteration:
             # If the batch iterator is exhausted, reinstantiate a new one.
             logger.debug(
-                "===> [OfflineData]: Batch iterator exhausted. Reinstantiating ..."                
+                "===> [OfflineData]: Batch iterator exhausted. Reinstantiating ..."
             )
             self.batch_iterator = None
             return self.sample(
@@ -97,6 +94,6 @@ class TLDRRLHFOfflineData(OfflineData):
 
     @property
     def default_map_batches_kwargs(self):
-        kwargs =  super().default_map_batches_kwargs
+        kwargs = super().default_map_batches_kwargs
         del kwargs["zero_copy_batch"]
         return kwargs

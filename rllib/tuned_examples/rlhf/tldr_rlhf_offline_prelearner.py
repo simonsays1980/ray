@@ -13,8 +13,8 @@ SIMPLE_CHAT_TEMPLATE = (
     "{{ 'Assistant:' }}{% endif %}"
 )
 
-class TLDRRLHFOfflinePreLearner(OfflinePreLearner):
 
+class TLDRRLHFOfflinePreLearner(OfflinePreLearner):
     def __init__(
         self,
         *,
@@ -45,7 +45,9 @@ class TLDRRLHFOfflinePreLearner(OfflinePreLearner):
         # TODO (simon): For RLHFPreLearner bring this into Tokenizer kwargs.
         self.tokenizer.chat_template = SIMPLE_CHAT_TEMPLATE
 
-    def __call__(self, batch: Union[Dict[str, np.ndarray], List[Dict[str, Any]]]) -> Union[Dict[str, List[EpisodeType]], List[Dict[str, Any]]]:
+    def __call__(
+        self, batch: Union[Dict[str, np.ndarray], List[Dict[str, Any]]]
+    ) -> Union[Dict[str, List[EpisodeType]], List[Dict[str, Any]]]:
 
         batch = [dict(zip(batch, values)) for values in zip(*batch.values())]
         tokenized_inputs = []
@@ -53,9 +55,8 @@ class TLDRRLHFOfflinePreLearner(OfflinePreLearner):
             tokenized_input = self._tokenize(row)
             if tokenized_input if tokenized_input["lengths"] <= 512 else []:
                 tokenized_inputs.append(tokenized_input)
-            
-        return {"batch": [self._pad(tokenized_inputs)]}
 
+        return {"batch": [self._pad(tokenized_inputs)]}
 
     def _tokenize(self, element) -> Dict[str, Any]:
         input_ids = self.tokenizer.apply_chat_template(

@@ -15,17 +15,23 @@
 
 # SFT Dataset TL;DR
 # https://huggingface.co/datasets/vwxyzjn/summarize_from_feedback_tldr_3_filtered
-#import pandas as pd
+# import pandas as pd
 import ray
 
 from ray.rllib.utils.framework import try_import_torch
-#from ray.rllib.utils.torch_utils import convert_to_torch_tensor
+
+# from ray.rllib.utils.torch_utils import convert_to_torch_tensor
 
 # ctx = ray.data.DataContext.get_current()
 # ctx.log_internal_stack_trace_to_stdout = True
 
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSequenceClassification, GenerationConfig
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    AutoModelForSequenceClassification,
+    GenerationConfig,
+)
 from ray.rllib.utils.framework import try_import_torch
 from transformers.generation.stopping_criteria import STOP_STRING_EMBEDDING_CACHE
 
@@ -70,16 +76,20 @@ if tokenizer.chat_template is None:
 
 
 def tokenize(element):
-    #print(f"===> messages: {element['messages']}")
+    # print(f"===> messages: {element['messages']}")
     input_ids = tokenizer.apply_chat_template(
         element["messages"][:1],
         padding=False,
         add_generation_prompt=True,
     )
-    return [{"input_ids": input_ids, "lengths": len(input_ids)}] if len(input_ids) <= 512 else []
+    return (
+        [{"input_ids": input_ids, "lengths": len(input_ids)}]
+        if len(input_ids) <= 512
+        else []
+    )
 
 
-#ds_train_mapped = ds_train.map(tokenize).filter(lambda x: x["lengths"] <= 512)
+# ds_train_mapped = ds_train.map(tokenize).filter(lambda x: x["lengths"] <= 512)
 ds_train_mapped = ds_train.flat_map(tokenize)
 
 policy = AutoModelForCausalLM.from_pretrained(
@@ -104,7 +114,7 @@ reward_model = AutoModelForSequenceClassification.from_pretrained(
 )
 
 generation_config = GenerationConfig(
-    max_new_tokens=53, # response_length
+    max_new_tokens=53,  # response_length
     temperature=(TEMPERATURE + 1e-7),
     top_k=0.0,
     top_p=1.0,
@@ -114,14 +124,14 @@ generation_config = GenerationConfig(
 # generation_config.pad_token_id = None
 train_batch = ds_train_mapped.take(4)
 print(train_batch)
-#input_ids = data_collator.return_tensors(train_batch["input_ids"])
+# input_ids = data_collator.return_tensors(train_batch["input_ids"])
 # input_ids = torch.Tensor(train_batch["input_ids"].tolist())
 tokenized_inputs = tokenizer.pad(
-    train_batch, 
-    max_length=None, 
-    padding=True, 
-    pad_to_multiple_of=None, 
-    return_tensors="pt"
+    train_batch,
+    max_length=None,
+    padding=True,
+    pad_to_multiple_of=None,
+    return_tensors="pt",
 )
 
 # TODO (simon): This happens in a loop. Try out, if this works as well
@@ -185,7 +195,9 @@ reference_logits /= TEMPERATURE + 1e-7
 # Log probabilities for all logits.
 reference_all_logprobs = nn.functional.softmax(reference_logits, dim=-1)
 # Gather only the log-probabilities for the tokens in the response.
-reference_logprobs = torch.gather(reference_all_logprobs, dim=2, index=responses.unsqueeze(-1)).squeeze(-1)
+reference_logprobs = torch.gather(
+    reference_all_logprobs, dim=2, index=responses.unsqueeze(-1)
+).squeeze(-1)
 # Clean up as fast as possible.
 del reference_output, reference_logits, reference_all_logprobs
 torch.cuda.empty_cache()
@@ -204,19 +216,29 @@ if STOP_TOKEN_ID is not None:
     # in the response and pad the responses from thereon.
     stop_token_locations = postprocessed_responses == STOP_TOKEN_ID
     # Now get the indices of the first `True` (zero).
-    first_zero = torch.max(stop_token_locations.type(torch.long), dim=-1).indices.unsqueeze(-1)
+    first_zero = torch.max(
+        stop_token_locations.type(torch.long), dim=-1
+    ).indices.unsqueeze(-1)
     first_zero[first_zero == 0] = postprocessed_responses.shape[-1]
     # Mask now the zero tokens in the responses with the pad token ID.
-    view_shape = [1] * (len(postprocessed_responses.size()) - 1) + [postprocessed_responses.shape[1]]
-    batch_indices = torch.arange(postprocessed_responses.shape[1], device=postprocessed_responses.device).view(*view_shape)
-    postprocessed_responses = torch.masked_fill(postprocessed_responses, batch_indices > first_zero, tokenizer.pad_token_id)
+    view_shape = [1] * (len(postprocessed_responses.size()) - 1) + [
+        postprocessed_responses.shape[1]
+    ]
+    batch_indices = torch.arange(
+        postprocessed_responses.shape[1], device=postprocessed_responses.device
+    ).view(*view_shape)
+    postprocessed_responses = torch.masked_fill(
+        postprocessed_responses, batch_indices > first_zero, tokenizer.pad_token_id
+    )
 
 
 # Concatenate the postprocessed responses with the queries.
 postprocessed_query_responses = torch.cat([queries, postprocessed_responses], dim=1)
 # Get the sequence lengths.
-pad_token_locations = (postprocessed_responses == tokenizer.pad_token_id)
-first_pad_tokens = torch.max(pad_token_locations.type(torch.long), dim=-1).indices.unsqueeze(-1)
+pad_token_locations = postprocessed_responses == tokenizer.pad_token_id
+first_pad_tokens = torch.max(
+    pad_token_locations.type(torch.long), dim=-1
+).indices.unsqueeze(-1)
 # Note, the sequence ends before the padding token.
 sequence_lengths = first_pad_tokens - 1
 
@@ -261,8 +283,9 @@ output = reward_model_backbone(
 # Note, this gives a shape (b, context + response, 1)
 reward_logits = reward_model.score(output.hidden_states[-1])
 # Use only rewards from the last token.
-scores = reward_logits[torch.arange(reward_logits.size(0), device=reward_logits.device), sequence_lengths].squeeze(-1)
-
+scores = reward_logits[
+    torch.arange(reward_logits.size(0), device=reward_logits.device), sequence_lengths
+].squeeze(-1)
 
 
 # Next processing: Ensure that all responses contain the stop token and
@@ -271,12 +294,16 @@ contain_eos_token = torch.any(postprocessed_responses == STOP_TOKEN_ID, dim=-1)
 if MISSING_EOS_PENALTY:
     scores[~contain_eos_token] -= MISSING_EOS_PENALTY
 
-# Pad the logprobs with the INVALID_LOGPROB (i.e. where responses are 
+# Pad the logprobs with the INVALID_LOGPROB (i.e. where responses are
 # shorter than the sequence).
-response_idxs = torch.arange(responses.shape[1], device=responses.device).repeat(responses.shape[0], 1)
+response_idxs = torch.arange(responses.shape[1], device=responses.device).repeat(
+    responses.shape[0], 1
+)
 padding_mask = response_idxs > sequence_lengths
 logprobs = torch.masked_fill(logprobs, padding_mask, INVALID_LOGPROB)
-reference_logprobs = torch.masked_fill(reference_logprobs, padding_mask, INVALID_LOGPROB)
+reference_logprobs = torch.masked_fill(
+    reference_logprobs, padding_mask, INVALID_LOGPROB
+)
 # Now the same padding for the values, but including the EOS token.
 sequence_lengths_p1 = sequence_lengths + 1
 padding_mask_p1 = response_idxs > sequence_lengths_p1.unsqueeze(-1)
@@ -288,10 +315,14 @@ values = torch.masked_fill(values, padding_mask_p1, 0)
 # Each token gets a KL reward for being near in probability to the reference policy.
 kl = logprobs - reference_logprobs
 kl_reward = -KL_COEFF * kl
-# Now add the reward for the whole sequence to the one with the EOS Token (or last token 
+# Now add the reward for the whole sequence to the one with the EOS Token (or last token
 # when no EOS token (this might got penalized before)).
 rewards = kl_reward.clone()
-actual_end_of_response = torch.where(sequence_lengths_p1 < rewards.size(1), sequence_lengths_p1, sequence_lengths)
-rewards[[torch.arange(rewards.size(0), device=rewards.device), actual_end_of_response]] += scores
+actual_end_of_response = torch.where(
+    sequence_lengths_p1 < rewards.size(1), sequence_lengths_p1, sequence_lengths
+)
+rewards[
+    [torch.arange(rewards.size(0), device=rewards.device), actual_end_of_response]
+] += scores
 print(rewards)
 # # Create SingleAgentEpisode with entries.
