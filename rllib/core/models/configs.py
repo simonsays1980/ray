@@ -1095,21 +1095,34 @@ class ActorCriticEncoderConfig(ModelConfig):
                 return TfActorCriticEncoder(self)
 
 
+@dataclass
 class LLMConfig(ModelConfig):
 
-    from ray.rllib.utils.framework import try_import_torch
-
-    torch, _ = try_import_torch()
-
     model_id: str = None
-    torch_dtype: torch.FloatType = torch.bfloat16
+    classifier: bool = False
 
     def build(self, framework: str = "torch") -> "Model":
-        from transformers import pipeline
 
-        return pipeline(
-            "text-generation",
-            model=self.model_id,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-        )
+        if framework is not "torch":
+            raise ValueError(
+                f"The framework {framework} is not supported. " "Use framework 'torch'."
+            )
+        if not self.model_id:
+            raise ValueError(
+                "No model ID: `model_id` is `None`. It needs a model ID "
+                "to build an LLM model from HuggingFace."
+            )
+        if self.classifier:
+            from transformers import AutoModelForSequenceClassification
+
+            return AutoModelForSequenceClassification.from_pretrained(
+                self.model_id,
+                trust_remote_code=True,
+            )
+        else:
+            from transformers import AutoModelForCausalLM
+
+            return AutoModelForCausalLM.from_pretrained(
+                self.model_id,
+                trust_remote_code=True,
+            )

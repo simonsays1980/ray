@@ -5,9 +5,6 @@ config = (
     RLHFConfig()
     .offline_data(
         input_="trl-internal-testing/tldr-preference-sft-trl-style",
-        iter_batches_kwargs={
-            "local_shuffle_buffer_size": None,
-        }
     )
     .training(
         sft_model_id="cleanrl/EleutherAI_pythia-1b-deduped__sft__tldr",
