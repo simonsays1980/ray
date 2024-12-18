@@ -11,10 +11,11 @@ from ray.rllib.utils.typing import TensorType
 class RLHFRLModule(RLModule, ValueFunctionAPI, abc.ABC):
     @override(RLModule)
     def setup(self):
+        
+        self.pad_token_id = self.model_config["pad_token_id"]
+        self.generation_config = self.model_config["generation_config"]
 
-        self.generation_config = self._model_config_dict["generation_config"]
-
-        self.temperature = self._model_config_dict["temperature"]
+        self.temperature = self.model_config["temperature"]
 
         if self.catalog is None and hasattr(self, "_catalog_ctor_error"):
             raise self._catalog_ctor_error

@@ -12,6 +12,7 @@ from ray.rllib.models.torch.misc import (
 )
 from ray.rllib.models.utils import get_activation_fn, get_initializer_fn
 from ray.rllib.utils.annotations import ExperimentalAPI
+from transformers import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
 if TYPE_CHECKING:
     from ray.rllib.core.models.base import Model, Encoder
@@ -1094,7 +1095,6 @@ class ActorCriticEncoderConfig(ModelConfig):
             else:
                 return TfActorCriticEncoder(self)
 
-
 @dataclass
 class LLMConfig(ModelConfig):
 
@@ -1103,9 +1103,10 @@ class LLMConfig(ModelConfig):
 
     def build(self, framework: str = "torch") -> "Model":
 
-        if framework is not "torch":
+        if framework != "torch":
             raise ValueError(
-                f"The framework {framework} is not supported. " "Use framework 'torch'."
+                f"The framework {framework} is not supported. "
+                "Use framework 'torch'."
             )
         if not self.model_id:
             raise ValueError(

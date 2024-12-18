@@ -2,7 +2,7 @@ import gymnasium as gym
 from ray.rllib.algorithms.ppo.ppo_catalog import PPOCatalog
 from ray.rllib.core.models.configs import LLMConfig
 from ray.rllib.core.models.base import Model
-
+from ray.rllib.utils.annotations import override
 
 class RLHFCatalog(PPOCatalog):
     def __init__(
@@ -25,3 +25,11 @@ class RLHFCatalog(PPOCatalog):
             model_id=self._model_config_dict["rm_model_id"],
             classifier=True,
         )
+
+    @override(PPOCatalog)
+    def build_pi_head(self, framework: str) -> Model:
+        return self.pi_head_config.build(framework=framework)
+
+    @override(PPOCatalog)
+    def build_vf_head(self, framework: str) -> Model:
+        return self.vf_head_config.build(framework=framework)

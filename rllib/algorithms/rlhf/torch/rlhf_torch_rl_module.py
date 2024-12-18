@@ -45,12 +45,12 @@ class RLHFTorchRLModule(TorchRLModule, RLHFRLModule):
             # Sequences. Return only responses not queries.
             Columns.ACTIONS: output.sequences[:, batch["input_ids"].shape[1] :],
             # Logits.
-            Columns.ACTION_DIST_INPUTS: torch.stack(output.scores, dim=-1),
+            Columns.ACTION_DIST_INPUTS: torch.stack(output.scores, dim=1),
         }
 
     def reference_forward(self, batch: Dict[str, Any]) -> Dict[str, Any]:
 
-        attention_mask = batch["attention_mask"]
+        attention_mask = batch["query_responses"] != self.pad_token_id
         # Generate position IDs.
         position_ids = attention_mask.cumsum(dim=1) - attention_mask.long()
         # Mask padding with zero.
@@ -65,7 +65,7 @@ class RLHFTorchRLModule(TorchRLModule, RLHFRLModule):
             output_hidden_states=True,
         )
 
-        logits = output[:, batch["input_ids"].shape[1] - 1 : -1]
+        logits = output.logits[:, batch["input_ids"].shape[1] - 1 : -1]
         # Scale the logits by the desired temperature.
         logits /= self.temperature + 1e-7
 
@@ -78,13 +78,18 @@ class RLHFTorchRLModule(TorchRLModule, RLHFRLModule):
         self, batch: Dict[str, Any], embeddings: Optional[Any] = None
     ) -> TensorType:
 
+        # Note, for values we consider the raw queries and responses.
+        attention_mask = batch["query_responses"] != self.pad_token_id
+        # Generate position IDs.
+        position_ids = attention_mask.cumsum(dim=1) - attention_mask.long()
+        # Mask padding with 0.
+        input_ids = torch.masked_fill(batch["query_responses"], ~attention_mask, value=0)
         # Get the value model LLM backbone.
         vf_llm_backbone = getattr(self.vf, self.vf.base_model_prefix)
-
         output = vf_llm_backbone(
-            input_ids=batch["input_ids"],
-            attention_mask=batch["attention_mask"],
-            position_ids=batch["position_ids"],
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
             return_dict=True,
             output_hidden_states=True,
             # We need output for new sequences.
@@ -93,19 +98,24 @@ class RLHFTorchRLModule(TorchRLModule, RLHFRLModule):
 
         # Compute values by using the score function with the last hidden
         # state. Note, this gives a shape (b, context + response, 1)
-        values = self.vf.score(output.hidden_state[-1])
+        values = self.vf.score(output.hidden_states[-1])
 
-        return values[:, batch["context_length"] - 1 : -1].squeeze(-1)
+        return values[:, batch["input_ids"].shape[1] - 1 : -1].squeeze(-1)
 
     def compute_rewards(self, batch: Dict[str, Any]) -> TensorType:
 
+        # Note, for rewards we consider the postprocessed responses.
+        attention_mask = batch["postprocessed_query_responses"] != self.pad_token_id
+        # Generate position IDs.
+        position_ids = attention_mask.cumsum(dim=1) - attention_mask.long()
+        # Masked padding with 0.
+        input_ids = torch.masked_fill(batch["postprocessed_query_responses"], ~attention_mask, value=0)
         # Get the value model LLM backbone.
         rm_llm_backbone = getattr(self.rm, self.rm.base_model_prefix)
-
         output = rm_llm_backbone(
-            input_ids=batch["input_ids"],
-            attention_mask=batch["attention_mask"],
-            position_ids=batch["position_ids"],
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
             return_dict=True,
             output_hidden_states=True,
             # We need output for new sequences.
@@ -114,8 +124,9 @@ class RLHFTorchRLModule(TorchRLModule, RLHFRLModule):
 
         # Compute values by using the score function with the last hidden
         # state. Note, this gives a shape (b, context + response, 1)
-        reward_logits = self.rm.score(output.hidden_state[-1])
+        reward_logits = self.rm.score(output.hidden_states[-1])
 
+        # Use only the rewards from the last token.
         return reward_logits[
             torch.arange(reward_logits.size(0), device=reward_logits.device),
             batch["sequence_lengths"],

@@ -1,5 +1,6 @@
 import logging
 from datasets import load_dataset
+from typing import Dict, Any
 
 import ray
 from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
@@ -79,7 +80,7 @@ class TLDRRLHFOfflineData(OfflineData):
 
         # Return a single batch from the iterator.
         try:
-            return next(self.batch_iterator)
+            return next(self.batch_iterator)["batch"][0]
         except StopIteration:
             # If the batch iterator is exhausted, reinstantiate a new one.
             logger.debug(
@@ -91,6 +92,22 @@ class TLDRRLHFOfflineData(OfflineData):
                 return_iterator=False,
                 num_shards=1,
             )
+
+    def postprocess(self, batch: Dict[str, Any]) -> Dict[str, Any]:
+
+        # TODO (simon): If we stick with this, make it a class attribute,
+        # like `local_prelearner`.
+        return TLDRRLHFOfflinePreLearner(
+            config=self.config,
+            sft_model_id=self.config.sft_model_id,
+        ).postprocess(batch)
+
+    def postprocess_rewards(self, batch: Dict[str, Any]) -> Dict[str, Any]:
+
+        return TLDRRLHFOfflinePreLearner(
+            config=self.config,
+            sft_model_id=self.config.sft_model_id,
+        ).postprocess_rewards(batch)
 
     @property
     def default_map_batches_kwargs(self):
