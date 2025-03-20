@@ -1,4 +1,3 @@
-
 from ray.rllib.algorithms.marwil.torch.marwil_torch_learner import MARWILTorchLearner
 from ray.rllib.algorithms.ppo.ppo import (
     LEARNER_RESULTS_VF_EXPLAINED_VAR_KEY,
@@ -12,16 +11,18 @@ from ray.rllib.utils.torch_utils import explained_variance
 
 torch, nn = try_import_torch()
 
-class BCIRLPPOTorchLearner(MARWILTorchLearner):
 
-    def configure_optimizers_for_module(self, module_id, config = None):        
+class BCIRLPPOTorchLearner(MARWILTorchLearner):
+    def configure_optimizers_for_module(self, module_id, config=None):
         # TODO (simon): Create a constant for Reward Module.
         if module_id == "reward_module":
             # Receive the module.
             module = self._module[module_id]
 
             # Define the optimizer for the reward model.
-            params_reward = self.get_parameters(module.rf_encoder) + self.get_parameters(module.rf)
+            params_reward = self.get_parameters(
+                module.rf_encoder
+            ) + self.get_parameters(module.rf)
             optim_reward = torch.optim.Adam(params_reward, eps=1e-7)
 
             self.register_optimizer(
@@ -35,9 +36,9 @@ class BCIRLPPOTorchLearner(MARWILTorchLearner):
         # from both classes.
         # else:
         #   return super().configure_optimizers_for_module(module_id, config)
-    
-    def compute_loss_for_module(self, *, module_id, config = None, batch, fwd_out):
-        #return super().compute_loss_for_module(module_id=module_id, config=config, batch=batch, fwd_out=fwd_out)
+
+    def compute_loss_for_module(self, *, module_id, config=None, batch, fwd_out):
+        # return super().compute_loss_for_module(module_id=module_id, config=config, batch=batch, fwd_out=fwd_out)
 
         module = self.module[module_id].unwrapped()
 
