@@ -626,7 +626,7 @@ class Algorithm(Checkpointable, Trainable):
         else:
             self.offline_data = None
 
-        if not self.offline_data:
+        if not self.config.is_offline or self.config.is_online:
             # Create a set of env runner actors via a EnvRunnerGroup.
             self.env_runner_group = EnvRunnerGroup(
                 env_creator=self.env_creator,

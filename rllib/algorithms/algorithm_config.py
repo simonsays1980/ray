@@ -4893,14 +4893,16 @@ class AlgorithmConfig(_Config):
         # action and observation spaces. Note, we require here the spaces,
         # i.e. a user cannot provide an environment instead because we do
         # not want to create the environment to receive spaces.
-        if self.is_offline and (
-            not (self.evaluation_num_env_runners > 0 or self.evaluation_interval)
-            and (self.action_space is None or self.observation_space is None)
-        ):
-            self._value_error(
-                "If no evaluation should be run, `action_space` and "
-                "`observation_space` must be provided."
-            )
+        if not self.is_online:
+            if self.is_offline and (
+                not (self.evaluation_num_env_runners > 0 or self.evaluation_interval)
+                and not (self.num_env_runners > 0)
+                and (self.action_space is None or self.observation_space is None)
+            ):
+                self._value_error(
+                    "If no evaluation should be run, `action_space` and "
+                    "`observation_space` must be provided."
+                )
 
         from ray.rllib.offline.offline_data import OfflineData
         from ray.rllib.offline.offline_prelearner import OfflinePreLearner
@@ -4971,6 +4973,11 @@ class AlgorithmConfig(_Config):
             and self.input_ != "sampler"
             and self.enable_rl_module_and_learner
         )
+
+    @property
+    def is_online(self) -> bool:
+        """Defines, if this config is for online RL."""
+        return not self.is_offline
 
     @staticmethod
     def _serialize_dict(config):

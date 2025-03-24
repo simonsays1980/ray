@@ -40,6 +40,8 @@ class Columns:
     SEQ_LENS = "seq_lens"
     # Episode timestep counter.
     T = "t"
+    # Episode lengths.
+    EPS_LENS = "eps_lens"
 
     # Common extra RLModule output keys.
     STATE_IN = "state_in"
