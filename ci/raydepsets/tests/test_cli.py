@@ -276,6 +276,7 @@ class TestCli(unittest.TestCase):
                 output="requirements_compiled_general.txt",
                 append_flags=[],
                 override_flags=[],
+                config_name="test.depsets.yaml",
             )
             with self.assertRaises(RuntimeError):
                 manager.check_subset_exists(
@@ -336,14 +337,12 @@ class TestCli(unittest.TestCase):
 
     def test_override_uv_flag_single_flag(self):
         expected_flags = DEFAULT_UV_FLAGS.copy()
-        expected_flags.remove("--extra-index-url")
-        expected_flags.remove("https://download.pytorch.org/whl/cpu")
-        expected_flags.extend(
-            ["--extra-index-url", "https://download.pytorch.org/whl/cu128"]
-        )
+        expected_flags.remove("--index-strategy")
+        expected_flags.remove("unsafe-best-match")
+        expected_flags.extend(["--index-strategy", "first-index"])
         assert (
             _override_uv_flags(
-                ["--extra-index-url https://download.pytorch.org/whl/cu128"],
+                ["--index-strategy first-index"],
                 DEFAULT_UV_FLAGS.copy(),
             )
             == expected_flags
@@ -439,6 +438,7 @@ class TestCli(unittest.TestCase):
                 operation="invalid_op",
                 requirements=["requirements_test.txt"],
                 output="requirements_compiled_invalid_op.txt",
+                config_name="test.depsets.yaml",
             )
             _overwrite_config_file(tmpdir, depset)
             with self.assertRaises(ValueError):
@@ -610,6 +610,7 @@ class TestCli(unittest.TestCase):
                 constraints=["requirement_constraints_test.txt"],
                 requirements=["requirements_test.txt"],
                 output="requirements_compiled_test.txt",
+                config_name="test.depsets.yaml",
             )
             _overwrite_config_file(tmpdir, depset)
             manager = _create_test_manager(tmpdir, check=True)
@@ -634,6 +635,7 @@ class TestCli(unittest.TestCase):
                 constraints=["requirement_constraints_test.txt"],
                 requirements=["requirements_test.txt"],
                 output="requirements_compiled_test.txt",
+                config_name="test.depsets.yaml",
             )
             _overwrite_config_file(tmpdir, depset)
             manager = _create_test_manager(tmpdir, check=True)
@@ -668,6 +670,7 @@ class TestCli(unittest.TestCase):
                 constraints=["requirement_constraints_test.txt"],
                 requirements=["requirements_test.txt"],
                 output="requirements_compiled_test.txt",
+                config_name="test.depsets.yaml",
             )
             _overwrite_config_file(tmpdir, depset)
             manager = _create_test_manager(tmpdir, check=True)

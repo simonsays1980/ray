@@ -62,6 +62,9 @@ using rpc::GcsNodeInfo;
 using rpc::JobTableData;
 using rpc::ResourceUsageBatchData;
 
+// TODO(#54703): Put this type in a separate target.
+using AddProcessToCgroupHook = std::function<void(const std::string &)>;
+
 struct NodeManagerConfig {
   /// The node's resource configuration.
   ResourceSet resource_config;
@@ -147,10 +150,11 @@ class NodeManager : public rpc::NodeManagerServiceHandler,
       LeaseDependencyManager &lease_dependency_manager,
       WorkerPoolInterface &worker_pool,
       absl::flat_hash_map<LeaseID, std::shared_ptr<WorkerInterface>> &leased_workers,
-      plasma::PlasmaClientInterface &store_client,
+      std::shared_ptr<plasma::PlasmaClientInterface> store_client,
       std::unique_ptr<core::experimental::MutableObjectProviderInterface>
           mutable_object_provider,
       std::function<void(const rpc::NodeDeathInfo &)> shutdown_raylet_gracefully,
+      AddProcessToCgroupHook add_process_to_system_cgroup_hook,
       std::unique_ptr<CgroupManagerInterface> cgroup_manager);
 
   /// Handle an unexpected error that occurred on a client connection.
@@ -158,7 +162,7 @@ class NodeManager : public rpc::NodeManagerServiceHandler,
   ///
   /// \param client The client whose connection the error occurred on.
   /// \param error The error details.
-  void HandleClientConnectionError(std::shared_ptr<ClientConnection> client,
+  void HandleClientConnectionError(const std::shared_ptr<ClientConnection> &client,
                                    const boost::system::error_code &error);
 
   /// Process a message from a client. This method is responsible for
@@ -398,14 +402,14 @@ class NodeManager : public rpc::NodeManagerServiceHandler,
   /// arrive after the worker lease has been returned to the node manager.
   ///
   /// \param worker Shared ptr to the worker, or nullptr if lost.
-  void HandleDirectCallTaskBlocked(const std::shared_ptr<WorkerInterface> &worker);
+  void HandleNotifyWorkerBlocked(const std::shared_ptr<WorkerInterface> &worker);
 
   /// Handle a task that is unblocked. Note that this callback may
   /// arrive after the worker lease has been returned to the node manager.
   /// However, it is guaranteed to arrive after DirectCallTaskBlocked.
   ///
   /// \param worker Shared ptr to the worker, or nullptr if lost.
-  void HandleDirectCallTaskUnblocked(const std::shared_ptr<WorkerInterface> &worker);
+  void HandleNotifyWorkerUnblocked(const std::shared_ptr<WorkerInterface> &worker);
 
   /// Destroy a worker.
   /// We will disconnect the worker connection first and then kill the worker.
@@ -748,7 +752,7 @@ class NodeManager : public rpc::NodeManagerServiceHandler,
   /// A Plasma object store client. This is used for creating new objects in
   /// the object store (e.g., for actor tasks that can't be run because the
   /// actor died) and to pin objects that are in scope in the cluster.
-  plasma::PlasmaClientInterface &store_client_;
+  std::shared_ptr<plasma::PlasmaClientInterface> store_client_;
   /// Mutable object provider for compiled graphs.
   std::unique_ptr<core::experimental::MutableObjectProviderInterface>
       mutable_object_provider_;
@@ -879,6 +883,10 @@ class NodeManager : public rpc::NodeManagerServiceHandler,
   /// Monitors and reports node memory usage and whether it is above threshold.
   std::unique_ptr<MemoryMonitor> memory_monitor_;
 
+  /// Used to move the dashboard and runtime_env agents into the system cgroup.
+  AddProcessToCgroupHook add_process_to_system_cgroup_hook_;
+
+  // Controls the lifecycle of the CgroupManager.
   std::unique_ptr<CgroupManagerInterface> cgroup_manager_;
 };
 
